@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>מערכת לידים · אביחי מזוז</title>
+<style>
+  :root{
+    --bg:#f4f1ea; --bg2:#ffffff; --ink:#1b1f27; --sub:#6b6456; --line:#e4ddcc;
+    --gold:#a9822f; --gold2:#c9a24b; --card:#ffffff; --shadow:0 8px 30px rgba(30,25,10,.08);
+    --danger:#b23b3b; --ok:#2f7a4f; --warn:#b3852a; --chip:#efe8d6;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0c0e12; --bg2:#12151b; --ink:#eee9da; --sub:#9a9484; --line:#242833;
+    --gold:#d8b45c; --gold2:#e9c876; --card:#161a22; --shadow:0 8px 30px rgba(0,0,0,.4);
+    --chip:#1d222c;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0c0e12; --bg2:#12151b; --ink:#eee9da; --sub:#9a9484; --line:#242833;
+      --gold:#d8b45c; --gold2:#e9c876; --card:#161a22; --shadow:0 8px 30px rgba(0,0,0,.4);
+      --chip:#1d222c;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{overflow-x:clip;max-width:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI","Assistant",Arial,sans-serif;min-height:100vh;transition:background .2s,color .2s}
+  a{color:inherit}
+  ::selection{background:var(--gold2);color:#1b1f27}
+
+  /* ---------- Login ---------- */
+  #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .loginCard{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:40px 34px;width:100%;max-width:380px;text-align:center}
+  .loginCard h1{font-size:1.4rem;margin:0 0 4px;letter-spacing:.5px}
+  .loginCard .sub{color:var(--sub);font-size:.85rem;margin-bottom:26px}
+  .field{text-align:right;margin-bottom:14px}
+  .field label{display:block;font-size:.78rem;color:var(--sub);margin-bottom:6px}
+  .field input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:.95rem}
+  .field input:focus{outline:none;border-color:var(--gold)}
+  .btn{cursor:pointer;border:none;border-radius:12px;padding:12px 18px;font-size:.95rem;font-weight:600;transition:transform .1s, opacity .2s}
+  .btn:active{transform:scale(.97)}
+  .btnGold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#22190a;width:100%;margin-top:8px}
+  .btnGold:disabled{opacity:.6;cursor:default}
+  .loginErr{color:var(--danger);font-size:.82rem;margin-top:12px;min-height:1em}
+
+  /* ---------- App shell ---------- */
+  #app{display:none;min-height:100vh;flex-direction:column}
+  header.top{position:sticky;top:0;z-index:20;background:var(--bg2);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:12px 20px;flex-wrap:wrap}
+  header.top .brand{font-weight:700;font-size:1.05rem;background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap}
+  .tabs{display:flex;gap:6px;background:var(--chip);padding:4px;border-radius:12px}
+  .tabs button{background:transparent;border:none;padding:8px 18px;border-radius:9px;color:var(--sub);font-size:.9rem;cursor:pointer;font-weight:600}
+  .tabs button.active{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+  .spacer{flex:1}
+  .iconBtn{background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer;color:var(--ink);font-size:.85rem}
+
+  main{flex:1;padding:20px;max-width:1200px;width:100%;margin:0 auto}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+  .toolbar input[type=text], .toolbar select{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:.88rem}
+  .toolbar input[type=text]{flex:1;min-width:180px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+  .cube{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;cursor:pointer;box-shadow:var(--shadow);transition:transform .12s}
+  .cube:hover{transform:translateY(-2px)}
+  .cube .name{font-weight:700;font-size:1.02rem;margin-bottom:8px;word-break:break-word}
+  .cube .meta{color:var(--sub);font-size:.8rem;margin-bottom:10px;display:flex;flex-direction:column;gap:2px}
+  .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:.72rem;font-weight:700;background:var(--chip);color:var(--gold)}
+  .badge.new{color:var(--ok)}
+  .badge.wait{color:var(--warn)}
+  .badge.closed{color:var(--gold)}
+  .badge.lost{color:var(--danger)}
+
+  .statRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+  .stat .num{font-size:1.5rem;font-weight:800;color:var(--gold)}
+  .stat .lbl{font-size:.78rem;color:var(--sub);margin-top:2px}
+
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+  th,td{padding:10px 12px;text-align:right;font-size:.85rem;border-bottom:1px solid var(--line)}
+  th{color:var(--sub);font-weight:600;background:var(--chip)}
+  tr:last-child td{border-bottom:none}
+  .tableWrap{overflow-x:auto;max-width:100%;border-radius:14px}
+
+  /* ---------- Modal ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(10,10,10,.5);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:30px 16px;overflow-y:auto}
+  .overlay.show{display:flex}
+  .modal{background:var(--card);border-radius:18px;border:1px solid var(--line);box-shadow:var(--shadow);max-width:560px;width:100%;padding:26px;margin-top:20px}
+  .modal h2{margin:0 0 16px;font-size:1.15rem}
+  .modalGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modalGrid .full{grid-column:1/-1}
+  .modalGrid label{display:block;font-size:.75rem;color:var(--sub);margin-bottom:4px}
+  .modalGrid input, .modalGrid select, .modalGrid textarea{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:.86rem;font-family:inherit}
+  .modalGrid textarea{resize:vertical;min-height:60px}
+  .modalActions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;flex-wrap:wrap}
+  .btnGhost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+  .btnDanger{background:var(--danger);color:#fff}
+
+  .fab{position:fixed;bottom:24px;left:24px;background:linear-gradient(135deg,var(--gold),var(--gold2));color:#22190a;border:none;border-radius:999px;width:56px;height:56px;font-size:1.6rem;box-shadow:var(--shadow);cursor:pointer;z-index:15}
+
+  .empty{color:var(--sub);text-align:center;padding:60px 20px;font-size:.9rem}
+  .loading{color:var(--sub);text-align:center;padding:40px}
+
+  @media (max-width:640px){
+    .modalGrid{grid-template-columns:1fr}
+    header.top{padding:10px 12px}
+    main{padding:14px}
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="loginCard">
+    <h1>מערכת לידים</h1>
+    <div class="sub">אביחי מזוז · ביטוח משכנתא</div>
+    <div class="field"><label>אימייל</label><input id="loginEmail" type="email" autocomplete="username"></div>
+    <div class="field"><label>סיסמה</label><input id="loginPass" type="password" autocomplete="current-password"></div>
+    <button class="btn btnGold" id="loginBtn" onclick="doLogin()">כניסה</button>
+    <div class="loginErr" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="top">
+    <div class="brand">מערכת לידים</div>
+    <div class="tabs">
+      <button id="tabLeadsBtn" class="active" onclick="switchTab('leads')">לידים</button>
+      <button id="tabVisitsBtn" onclick="switchTab('visits')">מבקרים</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="iconBtn" onclick="toggleTheme()">🌓 מצב</button>
+    <button class="iconBtn" onclick="logout()">יציאה</button>
+  </header>
+
+  <main>
+    <section id="leadsTab">
+      <div class="toolbar">
+        <input type="text" id="searchBox" placeholder="חיפוש לפי שם / טלפון / הערות…" oninput="renderLeads()">
+        <select id="statusFilter" onchange="renderLeads()">
+          <option value="">כל הסטטוסים</option>
+        </select>
+        <select id="channelFilter" onchange="renderLeads()">
+          <option value="">כל הערוצים</option>
+          <option value="ישיר">ישיר</option>
+          <option value="ליברה">ליברה</option>
+          <option value="שוירץ">שוירץ</option>
+        </select>
+      </div>
+      <div id="leadsGrid" class="grid"><div class="loading">טוען…</div></div>
+    </section>
+
+    <section id="visitsTab" style="display:none">
+      <div class="statRow" id="visitStats"></div>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>תאריך ושעה</th><th>עמוד</th><th>מקור (referrer)</th><th>מכשיר</th><th>משך (שנ')</th><th>המרה</th></tr></thead>
+          <tbody id="visitsBody"><tr><td colspan="6" class="loading">טוען…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <button class="fab" onclick="openModal(null)" title="ליד חדש">+</button>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">ליד חדש</h2>
+    <div class="modalGrid" id="modalGrid"></div>
+    <div class="modalActions">
+      <button class="btn btnDanger" id="delBtn" onclick="deleteLead()" style="display:none">מחיקה</button>
+      <button class="btn btnGhost" onclick="closeModal()">ביטול</button>
+      <button class="btn btnGold" onclick="saveLead()">שמירה</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPA_URL = "https://ktcabahjyjmtfavlsdks.supabase.co";
+const SUPA_KEY = "sb_publishable_jYj0az-JCWUc3ga1fRYcew_La1y7qVw";
+const STATUSES = ["ליד חדש","ממתין לשליחת ליד","נשלח לליברה","נשלח לישיר","נשלח לשוירץ","בטיפול","נסגר","סירוב","ביטול"];
+
+let session = null;
+let leads = [];
+let visits = [];
+let currentLead = null;
+
+/* ---------- Theme ---------- */
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : (cur === 'light' ? null : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark'));
+  if(next) document.documentElement.setAttribute('data-theme', next);
+  else document.documentElement.removeAttribute('data-theme');
+  localStorage.setItem('leads2_theme', next || '');
+}
+(function initTheme(){
+  const saved = localStorage.getItem('leads2_theme');
+  if(saved) document.documentElement.setAttribute('data-theme', saved);
+})();
+
+/* ---------- Auth ---------- */
+function saveSession(s){ session = s; localStorage.setItem('leads2_session', JSON.stringify(s)); }
+function loadSession(){ try{ return JSON.parse(localStorage.getItem('leads2_session')); }catch(e){ return null; } }
+
+async function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('loginErr');
+  err.textContent = '';
+  if(!email || !pass){ err.textContent = 'נא למלא אימייל וסיסמה'; return; }
+  btn.disabled = true; btn.textContent = 'מתחבר…';
+  try{
+    const r = await fetch(SUPA_URL+"/auth/v1/token?grant_type=password", {
+      method:"POST", headers:{"Content-Type":"application/json","apikey":SUPA_KEY},
+      body: JSON.stringify({email, password: pass})
+    });
+    const d = await r.json();
+    if(!r.ok || !d.access_token){ err.textContent = 'פרטי התחברות שגויים'; btn.disabled=false; btn.textContent='כניסה'; return; }
+    saveSession({access_token:d.access_token, refresh_token:d.refresh_token, expires_at: Date.now()+ (d.expires_in||3600)*1000});
+    showApp();
+  }catch(e){
+    err.textContent = 'שגיאת חיבור, נסה שוב';
+    btn.disabled=false; btn.textContent='כניסה';
+  }
+}
+
+async function refreshSession(){
+  if(!session || !session.refresh_token) return false;
+  try{
+    const r = await fetch(SUPA_URL+"/auth/v1/token?grant_type=refresh_token", {
+      method:"POST", headers:{"Content-Type":"application/json","apikey":SUPA_KEY},
+      body: JSON.stringify({refresh_token: session.refresh_token})
+    });
+    const d = await r.json();
+    if(!r.ok || !d.access_token) return false;
+    saveSession({access_token:d.access_token, refresh_token:d.refresh_token, expires_at: Date.now()+(d.expires_in||3600)*1000});
+    return true;
+  }catch(e){ return false; }
+}
+
+async function authFetch(path, opts={}){
+  if(!session) session = loadSession();
+  if(session && session.expires_at < Date.now()+30000){ await refreshSession(); }
+  opts.headers = Object.assign({
+    "apikey": SUPA_KEY,
+    "Authorization": "Bearer " + (session? session.access_token : ""),
+    "Content-Type": "application/json"
+  }, opts.headers||{});
+  let r = await fetch(SUPA_URL+path, opts);
+  if(r.status === 401){
+    const ok = await refreshSession();
+    if(ok){
+      opts.headers.Authorization = "Bearer " + session.access_token;
+      r = await fetch(SUPA_URL+path, opts);
+    }
+  }
+  return r;
+}
+
+function logout(){
+  localStorage.removeItem('leads2_session');
+  session = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+function showApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  const sel = document.getElementById('statusFilter');
+  STATUSES.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sel.appendChild(o); });
+  loadLeads();
+  loadVisits();
+}
+
+/* ---------- Tabs ---------- */
+function switchTab(t){
+  document.getElementById('leadsTab').style.display = t==='leads' ? 'block' : 'none';
+  document.getElementById('visitsTab').style.display = t==='visits' ? 'block' : 'none';
+  document.getElementById('tabLeadsBtn').classList.toggle('active', t==='leads');
+  document.getElementById('tabVisitsBtn').classList.toggle('active', t==='visits');
+  if(t==='visits') loadVisits();
+}
+
+/* ---------- Leads ---------- */
+async function loadLeads(){
+  document.getElementById('leadsGrid').innerHTML = '<div class="loading">טוען…</div>';
+  const r = await authFetch('/rest/v1/leads?select=*&order=created_at.desc');
+  if(!r.ok){ document.getElementById('leadsGrid').innerHTML = '<div class="empty">שגיאה בטעינת לידים</div>'; return; }
+  leads = await r.json();
+  renderLeads();
+}
+
+function badgeClass(status){
+  if(status === 'נסגר') return 'closed';
+  if(status === 'ליד חדש') return 'new';
+  if(status === 'סירוב' || status === 'ביטול') return 'lost';
+  return 'wait';
+}
+
+function renderLeads(){
+  const q = (document.getElementById('searchBox').value||'').trim().toLowerCase();
+  const st = document.getElementById('statusFilter').value;
+  const ch = document.getElementById('channelFilter').value;
+  const grid = document.getElementById('leadsGrid');
+  let list = leads.filter(l=>{
+    if(st && l.status !== st) return false;
+    if(ch && !(l.channels||'').includes(ch)) return false;
+    if(q){
+      const hay = [l.name,l.phone,l.notes,l.id_number].filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  if(!list.length){ grid.innerHTML = '<div class="empty">לא נמצאו לידים</div>'; return; }
+  grid.innerHTML = list.map(l=>`
+    <div class="cube" onclick="openModal('${l.id}')">
+      <div class="name">${esc(l.name)||'(ללא שם)'}</div>
+      <div class="meta">
+        ${l.phone? '📞 '+esc(l.phone):''}
+        ${l.mortgage? '🏠 '+Number(l.mortgage).toLocaleString()+' ₪':''}
+        ${l.channels? '📨 '+esc(l.channels):''}
+        ${l.lead_date? '📅 '+esc(l.lead_date):''}
+      </div>
+      <span class="badge ${badgeClass(l.status)}">${esc(l.status)||'ליד חדש'}</span>
+    </div>
+  `).join('');
+}
+
+function esc(s){ return s==null? '' : String(s).replace(/[<>&]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c])); }
+
+const FIELDS = [
+  {k:'name', l:'שם מלא'}, {k:'phone', l:'טלפון'}, {k:'id_number', l:'ת.ז.'},
+  {k:'mortgage', l:'סכום משכנתא'}, {k:'premium', l:'פרמיה חודשית'}, {k:'insurance_type', l:'סוג (חדש/ניוד)'},
+  {k:'bank', l:'בנק המשכנתא'}, {k:'current_insurer', l:'מבטח נוכחי'},
+  {k:'status', l:'סטטוס', type:'select', opts:STATUSES},
+  {k:'channels', l:'ערוצים (ישיר/ליברה/שוירץ)'}, {k:'referral_source', l:'מקור הפניה'},
+  {k:'lead_date', l:'תאריך ליד', type:'date'}, {k:'close_date', l:'תאריך סגירה', type:'date'},
+  {k:'paid_to_avi', l:'שולם לאביחי'}, {k:'commission_to_client', l:'עמלה/מתנה ללקוח'},
+  {k:'source', l:'מקור הליד'},
+  {k:'notes', l:'הערות', type:'textarea', full:true}
+];
+
+function openModal(id){
+  currentLead = id ? leads.find(l=>l.id===id) : null;
+  document.getElementById('modalTitle').textContent = currentLead ? 'עריכת ליד' : 'ליד חדש';
+  document.getElementById('delBtn').style.display = currentLead ? 'inline-block' : 'none';
+  const grid = document.getElementById('modalGrid');
+  grid.innerHTML = FIELDS.map(f=>{
+    const val = currentLead ? (currentLead[f.k]||'') : '';
+    const cls = f.full ? 'full' : '';
+    if(f.type==='select'){
+      return `<div class="${cls}"><label>${f.l}</label><select data-k="${f.k}">
+        ${f.opts.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}
+      </select></div>`;
+    }
+    if(f.type==='textarea'){
+      return `<div class="${cls}"><label>${f.l}</label><textarea data-k="${f.k}">${esc(val)}</textarea></div>`;
+    }
+    return `<div class="${cls}"><label>${f.l}</label><input data-k="${f.k}" type="${f.type||'text'}" value="${esc(val)}"></div>`;
+  }).join('');
+  document.getElementById('overlay').classList.add('show');
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('show'); }
+
+async function saveLead(){
+  const obj = {};
+  document.querySelectorAll('#modalGrid [data-k]').forEach(el=>{ obj[el.dataset.k] = el.value || null; });
+  if(!obj.status) obj.status = 'ליד חדש';
+  let r;
+  if(currentLead){
+    r = await authFetch('/rest/v1/leads?id=eq.'+currentLead.id, {method:'PATCH', headers:{Prefer:'return=minimal'}, body: JSON.stringify(obj)});
+  } else {
+    obj.lead_date = obj.lead_date || new Date().toISOString().slice(0,10);
+    r = await authFetch('/rest/v1/leads', {method:'POST', headers:{Prefer:'return=minimal'}, body: JSON.stringify(obj)});
+  }
+  if(r.ok){ closeModal(); loadLeads(); }
+  else alert('שגיאה בשמירה');
+}
+
+async function deleteLead(){
+  if(!currentLead) return;
+  if(!confirm('למחוק את הליד לצמיתות?')) return;
+  const r = await authFetch('/rest/v1/leads?id=eq.'+currentLead.id, {method:'DELETE'});
+  if(r.ok){ closeModal(); loadLeads(); }
+  else alert('שגיאה במחיקה');
+}
+
+/* ---------- Visits ---------- */
+async function loadVisits(){
+  document.getElementById('visitsBody').innerHTML = '<tr><td colspan="6" class="loading">טוען…</td></tr>';
+  const r = await authFetch('/rest/v1/visits?select=*&order=ts.desc&limit=500');
+  if(!r.ok){ document.getElementById('visitsBody').innerHTML = '<tr><td colspan="6" class="empty">שגיאה בטעינה</td></tr>'; return; }
+  visits = await r.json();
+  renderVisits();
+}
+
+function renderVisits(){
+  const total = visits.length;
+  const converted = visits.filter(v=>v.converted).length;
+  const devices = {};
+  visits.forEach(v=>{ const d=v.device||'לא ידוע'; devices[d]=(devices[d]||0)+1; });
+  const topDevice = Object.entries(devices).sort((a,b)=>b[1]-a[1])[0];
+  const rate = total? Math.round(converted/total*100) : 0;
+  document.getElementById('visitStats').innerHTML = `
+    <div class="stat"><div class="num">${total}</div><div class="lbl">סה"כ כניסות</div></div>
+    <div class="stat"><div class="num">${converted}</div><div class="lbl">הפכו לפנייה</div></div>
+    <div class="stat"><div class="num">${rate}%</div><div class="lbl">אחוז המרה</div></div>
+    <div class="stat"><div class="num">${topDevice? topDevice[0] : '-'}</div><div class="lbl">מכשיר מוביל</div></div>
+  `;
+  const body = document.getElementById('visitsBody');
+  if(!visits.length){ body.innerHTML = '<tr><td colspan="6" class="empty">אין נתוני מבקרים עדיין</td></tr>'; return; }
+  body.innerHTML = visits.map(v=>`
+    <tr>
+      <td>${v.ts? new Date(v.ts).toLocaleString('he-IL') : ''}</td>
+      <td>${esc(v.path)}</td>
+      <td>${esc(v.referrer)||'ישיר'}</td>
+      <td>${esc(v.device)}</td>
+      <td>${v.duration!=null? v.duration : ''}</td>
+      <td>${v.converted? '✅' : ''}</td>
+    </tr>
+  `).join('');
+}
+
+/* ---------- Boot ---------- */
+(function(){
+  session = loadSession();
+  if(session && session.access_token){ showApp(); }
+})();
+</script>
+</body>
+</html>

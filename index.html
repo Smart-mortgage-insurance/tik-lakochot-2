@@ -575,6 +575,7 @@ function renderTasks(){
       <div class="txt">${esc(t.text)}${t.due_date? ' <span class="due">· '+esc(t.due_date)+'</span>':''}</div>
       ${t.client_name? `<button class="clientTag" data-client="${esc(t.client_name)}">${esc(t.client_name)}</button>`:''}
       <button class="iconBtn taskEditBtn">✏️</button>
+      <button class="iconBtn taskDelBtnRow">🗑️</button>
     </div>
   `).join('');
   document.querySelectorAll('#tasksList .taskDone').forEach(cb=>{
@@ -586,6 +587,15 @@ function renderTasks(){
   document.querySelectorAll('#tasksList .clientTag').forEach(btn=>{
     btn.onclick = ()=> openClientFromTask(btn.dataset.client);
   });
+  document.querySelectorAll('#tasksList .taskDelBtnRow').forEach(btn=>{
+    btn.onclick = ()=> deleteTaskById(btn.closest('.taskItem').dataset.id);
+  });
+}
+
+async function deleteTaskById(id){
+  if(!confirm('למחוק את המשימה?')) return;
+  const r = await authFetch('/rest/v1/tasks?id=eq.'+id, {method:'DELETE'});
+  if(r.ok) loadTasks(); else alert('שגיאה במחיקה');
 }
 
 async function addTask(){

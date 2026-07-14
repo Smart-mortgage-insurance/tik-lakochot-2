@@ -122,6 +122,20 @@
   /* ---------- Docs ---------- */
   .libraRow{border-top:1px dashed var(--line);padding-top:12px;margin-top:12px}
 
+  /* ---------- Mail ---------- */
+  .mailItem{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow)}
+  .mailItem .mailTop{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px;flex-wrap:wrap}
+  .mailItem .subj{font-weight:700}
+  .mailItem .from{color:var(--sub);font-size:.8rem}
+  .mailItem .date{color:var(--sub);font-size:.78rem;white-space:nowrap}
+  .mailItem .snippet{color:var(--sub);font-size:.85rem}
+  .unreadDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);margin-inline-end:6px}
+
+  /* ---------- Toast ---------- */
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--line);color:var(--ink);padding:14px 20px;border-radius:12px;box-shadow:var(--shadow);font-size:.88rem;font-weight:600;opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .25s,transform .25s;z-index:100}
+  .toast.show{opacity:1;transform:translateY(0)}
+  .toast.err{color:var(--danger)}
+
   @media (max-width:640px){
     .modalGrid{grid-template-columns:1fr}
     header.top{padding:10px 12px}
@@ -151,6 +165,7 @@
       <button id="tabTasksBtn" onclick="switchTab('tasks')">משימות</button>
       <button id="tabPaymentsBtn" onclick="switchTab('payments')">תשלומים</button>
       <button id="tabDocsBtn" onclick="switchTab('docs')">מסמכים</button>
+      <button id="tabMailBtn" onclick="switchTab('mail')">📧 תיבת דואר</button>
     </div>
     <div class="spacer"></div>
     <button class="iconBtn" onclick="toggleTheme()">🌓 מצב</button>
@@ -264,6 +279,10 @@
         <button class="btn btnGold" onclick="generateDoc()">הדפסה / שמירה כ-PDF</button>
       </div>
     </section>
+
+    <section id="mailTab" style="display:none">
+      <div id="mailList"><div class="loading">טוען…</div></div>
+    </section>
   </main>
 
   <button class="fab" onclick="openModal(null)" title="ליד חדש">+</button>
@@ -275,11 +294,15 @@
     <div class="modalGrid" id="modalGrid"></div>
     <div class="modalActions">
       <button class="btn btnDanger" id="delBtn" onclick="deleteLead()" style="display:none">מחיקה</button>
+      <button class="btn btnGhost" id="draftLibraBtn" onclick="draftLibra()" style="display:none">✉ צור טיוטה לדניאל</button>
+      <button class="btn btnGhost" id="yashirPdfBtn" onclick="yashirPdfAction()" style="display:none">📄 הפק PDF לישיר</button>
       <button class="btn btnGhost" onclick="closeModal()">ביטול</button>
       <button class="btn btnGold" onclick="saveLead()">שמירה</button>
     </div>
   </div>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <div class="overlay" id="taskOverlay">
   <div class="modal">
@@ -296,6 +319,7 @@
 <script>
 const SUPA_URL = "https://ktcabahjyjmtfavlsdks.supabase.co";
 const SUPA_KEY = "sb_publishable_jYj0az-JCWUc3ga1fRYcew_La1y7qVw";
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz5ZVsmDBGRvs56AjDZBUK3hTriVER2Q1H4841LdW7U11kyJv-AFzotFaPSrgA3qy8vGA/exec";
 const STATUSES = ["ליד חדש","ממתין לשליחת ליד","נשלח לליברה","נשלח לישיר","נשלח לשוירץ","בטיפול","נסגר","סירוב","ביטול"];
 
 let session = null;
@@ -303,12 +327,14 @@ let leads = [];
 let visits = [];
 let tasks = [];
 let expenses = [];
+let mail = [];
 let currentLead = null;
 let currentTask = null;
 let visitsLoaded = false;
 let tasksLoaded = false;
 let paymentsLoaded = false;
 let docsLoaded = false;
+let mailLoaded = false;
 
 /* ---------- Theme ---------- */
 function toggleTheme(){
@@ -399,7 +425,7 @@ function showApp(){
 }
 
 /* ---------- Tabs ---------- */
-const TABS = ['leads','visits','tasks','payments','docs'];
+const TABS = ['leads','visits','tasks','payments','docs','mail'];
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function switchTab(t){
   TABS.forEach(tb=>{
@@ -410,6 +436,7 @@ function switchTab(t){
   if(t==='tasks' && !tasksLoaded){ tasksLoaded = true; loadTasks(); }
   if(t==='payments' && !paymentsLoaded){ paymentsLoaded = true; loadPayments(); }
   if(t==='docs' && !docsLoaded){ docsLoaded = true; renderDocForm(); }
+  if(t==='mail' && !mailLoaded){ mailLoaded = true; loadMail(); }
 }
 
 /* ---------- Leads ---------- */
@@ -475,6 +502,8 @@ function openModal(id){
   currentLead = id ? leads.find(l=>l.id===id) : null;
   document.getElementById('modalTitle').textContent = currentLead ? 'עריכת ליד' : 'ליד חדש';
   document.getElementById('delBtn').style.display = currentLead ? 'inline-block' : 'none';
+  document.getElementById('draftLibraBtn').style.display = currentLead ? 'inline-block' : 'none';
+  document.getElementById('yashirPdfBtn').style.display = currentLead ? 'inline-block' : 'none';
   const grid = document.getElementById('modalGrid');
   grid.innerHTML = FIELDS.map(f=>{
     const val = currentLead ? (currentLead[f.k]||'') : '';
@@ -869,6 +898,92 @@ function generateDoc(){
       <div class="row label">תאריך: ${new Date().toLocaleDateString('he-IL')}</div>
     `);
   }
+}
+
+/* ---------- Toast ---------- */
+let toastTimer = null;
+function showToast(msg, isErr){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove('show'), 3500);
+}
+
+/* ---------- Mail (Apps Script Web App) ---------- */
+async function loadMail(){
+  document.getElementById('mailList').innerHTML = '<div class="loading">טוען…</div>';
+  if(!session) session = loadSession();
+  try{
+    const r = await fetch(WEBAPP_URL + '?action=inbox&token=' + encodeURIComponent(session? session.access_token : ''));
+    const d = await r.json();
+    if(!d.ok){ document.getElementById('mailList').innerHTML = '<div class="empty">שגיאה בטעינת תיבת הדואר</div>'; return; }
+    mail = d.items || [];
+    renderMail();
+  }catch(e){
+    document.getElementById('mailList').innerHTML = '<div class="empty">שגיאת חיבור לתיבת הדואר</div>';
+  }
+}
+
+function renderMail(){
+  const list = document.getElementById('mailList');
+  if(!mail.length){ list.innerHTML = '<div class="empty">אין מיילים להצגה</div>'; return; }
+  const sorted = mail.slice().sort((a,b)=> new Date(b.date) - new Date(a.date));
+  list.innerHTML = sorted.map(m=>`
+    <div class="mailItem">
+      <div class="mailTop">
+        <div class="subj">${m.unread? '<span class="unreadDot"></span>':''}${esc(m.subject)}</div>
+        <div class="date">${esc(m.date)}</div>
+      </div>
+      <div class="from">${esc(m.from)}</div>
+      <div class="snippet">${esc(m.snippet)}</div>
+    </div>
+  `).join('');
+}
+
+/* ---------- Lead actions via Apps Script Web App ---------- */
+function mapInsuranceType(v){
+  if(v==='חדש') return 'new';
+  if(v==='ניוד') return 'conversion';
+  return v || '';
+}
+
+async function callLeadAction(action, lead, btn, busyLabel, doneLabel){
+  if(!session) session = loadSession();
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = busyLabel;
+  try{
+    const r = await fetch(WEBAPP_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({
+        token: session? session.access_token : '',
+        action: action,
+        name: lead.name,
+        phone: lead.phone,
+        id_number: lead.id_number,
+        mortgage: lead.mortgage,
+        insurance_type: mapInsuranceType(lead.insurance_type)
+      })
+    });
+    const d = await r.json();
+    if(d.ok){ showToast(doneLabel); }
+    else{ showToast('שגיאה: ' + (d.error||'לא ידוע'), true); }
+  }catch(e){
+    showToast('שגיאת חיבור לשרת', true);
+  }
+  btn.disabled = false; btn.textContent = orig;
+}
+
+async function draftLibra(){
+  if(!currentLead) return;
+  await callLeadAction('draftLibra', currentLead, document.getElementById('draftLibraBtn'), 'שולח…', '✅ טיוטה נוצרה ב-Gmail');
+}
+
+async function yashirPdfAction(){
+  if(!currentLead) return;
+  await callLeadAction('yashirPdf', currentLead, document.getElementById('yashirPdfBtn'), 'מייצר…', '✅ PDF נוצר וטיוטה נשלחה');
 }
 
 /* ---------- Boot ---------- */

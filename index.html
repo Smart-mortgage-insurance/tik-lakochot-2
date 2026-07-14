@@ -99,6 +99,29 @@
   .empty{color:var(--sub);text-align:center;padding:60px 20px;font-size:.9rem}
   .loading{color:var(--sub);text-align:center;padding:40px}
 
+  /* ---------- Tasks ---------- */
+  .taskForm{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+  .taskForm input[type=text], .taskForm input[type=date], .taskForm input[type=number], .taskForm select{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:.88rem}
+  .taskForm input[type=text]{flex:1;min-width:180px}
+  .taskItem{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .taskItem.done{opacity:.55}
+  .taskItem.done .txt{text-decoration:line-through}
+  .taskItem .txt{flex:1;font-size:.9rem}
+  .taskItem .due{font-size:.78rem;color:var(--sub)}
+  .clientTag{background:var(--chip);color:var(--gold);border:none;border-radius:999px;padding:5px 12px;font-size:.75rem;font-weight:600;cursor:pointer}
+
+  /* ---------- Payments ---------- */
+  main h3{font-size:1rem;color:var(--sub);margin:26px 0 10px;font-weight:700}
+  main h3:first-child{margin-top:0}
+  .calcCard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+  .calcCard select, .calcCard input[type=number]{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:.88rem}
+  .calcCard label{display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--sub)}
+  .calcResult{font-weight:800;color:var(--gold);font-size:1.15rem;min-width:90px}
+  .calcNote{color:var(--sub);font-size:.78rem;margin:0 0 20px}
+
+  /* ---------- Docs ---------- */
+  .libraRow{border-top:1px dashed var(--line);padding-top:12px;margin-top:12px}
+
   @media (max-width:640px){
     .modalGrid{grid-template-columns:1fr}
     header.top{padding:10px 12px}
@@ -125,6 +148,9 @@
     <div class="tabs">
       <button id="tabLeadsBtn" class="active" onclick="switchTab('leads')">לידים</button>
       <button id="tabVisitsBtn" onclick="switchTab('visits')">מבקרים</button>
+      <button id="tabTasksBtn" onclick="switchTab('tasks')">משימות</button>
+      <button id="tabPaymentsBtn" onclick="switchTab('payments')">תשלומים</button>
+      <button id="tabDocsBtn" onclick="switchTab('docs')">מסמכים</button>
     </div>
     <div class="spacer"></div>
     <button class="iconBtn" onclick="toggleTheme()">🌓 מצב</button>
@@ -157,6 +183,87 @@
         </table>
       </div>
     </section>
+
+    <section id="tasksTab" style="display:none">
+      <div class="taskForm">
+        <input type="text" id="taskText" placeholder="משימה חדשה…">
+        <input type="text" id="taskClient" placeholder="שם ליד (אופציונלי)">
+        <input type="date" id="taskDue">
+        <button class="btn btnGold" onclick="addTask()">הוספה</button>
+      </div>
+      <div id="tasksList"><div class="loading">טוען…</div></div>
+    </section>
+
+    <section id="paymentsTab" style="display:none">
+      <div class="statRow" id="paymentStats"></div>
+
+      <h3>עמלה לפי ערוץ</h3>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>ערוץ</th><th>סה"כ שולם</th><th>מס' לידים</th></tr></thead>
+          <tbody id="channelBody"></tbody>
+        </table>
+      </div>
+
+      <h3>לפי חודש (תאריך סגירה)</h3>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>חודש</th><th>הכנסה</th></tr></thead>
+          <tbody id="monthBody"></tbody>
+        </table>
+      </div>
+
+      <h3>מחשבון עמלה</h3>
+      <div class="calcCard">
+        <select id="calcChannel" onchange="renderCalc()">
+          <option value="ישיר">ישיר</option>
+          <option value="ליברה">ליברה</option>
+          <option value="שוירץ">שוירץ</option>
+        </select>
+        <input type="number" id="calcValue" placeholder="סכום משכנתא / פרמיה חודשית" oninput="renderCalc()">
+        <label><input type="checkbox" id="calcMivne" onchange="renderCalc()"> מבנה</label>
+        <div class="calcResult" id="calcResult">-</div>
+      </div>
+      <div class="calcNote">לשוירץ־מבנה: (ערך כינון באלפים) × 0.88 ÷ 12 = עמלה חודשית</div>
+
+      <h3>ספר הוצאות</h3>
+      <div class="taskForm">
+        <input type="date" id="expDate">
+        <select id="expType">
+          <option value="מתנה ללקוח">מתנה ללקוח</option>
+          <option value="פרסום">פרסום</option>
+          <option value="תשלום למפנה">תשלום למפנה</option>
+          <option value="אחר">אחר</option>
+        </select>
+        <input type="text" id="expPayee" placeholder="למי / הערה">
+        <input type="number" id="expAmount" placeholder="סכום">
+        <button class="btn btnGold" onclick="addExpense()">הוספה</button>
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>תאריך</th><th>סוג</th><th>למי/הערה</th><th>סכום</th><th></th></tr></thead>
+          <tbody id="expensesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="docsTab" style="display:none">
+      <div class="toolbar">
+        <select id="docType" onchange="renderDocForm()">
+          <option value="receipt">קבלה</option>
+          <option value="libra">דרישת תשלום — ליברה</option>
+          <option value="yashir">ליד לישיר</option>
+        </select>
+      </div>
+      <div id="docForm" class="modalGrid" style="max-width:640px"></div>
+      <div id="libraRowsWrap" style="display:none">
+        <div id="libraRows"></div>
+        <button class="btn btnGhost" style="margin-top:12px" onclick="addLibraRow()">+ שורה</button>
+      </div>
+      <div style="margin-top:24px">
+        <button class="btn btnGold" onclick="generateDoc()">הדפסה / שמירה כ-PDF</button>
+      </div>
+    </section>
   </main>
 
   <button class="fab" onclick="openModal(null)" title="ליד חדש">+</button>
@@ -174,6 +281,18 @@
   </div>
 </div>
 
+<div class="overlay" id="taskOverlay">
+  <div class="modal">
+    <h2 id="taskModalTitle">עריכת משימה</h2>
+    <div class="modalGrid" id="taskModalGrid"></div>
+    <div class="modalActions">
+      <button class="btn btnDanger" id="taskDelBtn" onclick="deleteTask()">מחיקה</button>
+      <button class="btn btnGhost" onclick="closeTaskModal()">ביטול</button>
+      <button class="btn btnGold" onclick="saveTaskModal()">שמירה</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const SUPA_URL = "https://ktcabahjyjmtfavlsdks.supabase.co";
 const SUPA_KEY = "sb_publishable_jYj0az-JCWUc3ga1fRYcew_La1y7qVw";
@@ -182,7 +301,14 @@ const STATUSES = ["ליד חדש","ממתין לשליחת ליד","נשלח ל�
 let session = null;
 let leads = [];
 let visits = [];
+let tasks = [];
+let expenses = [];
 let currentLead = null;
+let currentTask = null;
+let visitsLoaded = false;
+let tasksLoaded = false;
+let paymentsLoaded = false;
+let docsLoaded = false;
 
 /* ---------- Theme ---------- */
 function toggleTheme(){
@@ -270,16 +396,20 @@ function showApp(){
   const sel = document.getElementById('statusFilter');
   STATUSES.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sel.appendChild(o); });
   loadLeads();
-  loadVisits();
 }
 
 /* ---------- Tabs ---------- */
+const TABS = ['leads','visits','tasks','payments','docs'];
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function switchTab(t){
-  document.getElementById('leadsTab').style.display = t==='leads' ? 'block' : 'none';
-  document.getElementById('visitsTab').style.display = t==='visits' ? 'block' : 'none';
-  document.getElementById('tabLeadsBtn').classList.toggle('active', t==='leads');
-  document.getElementById('tabVisitsBtn').classList.toggle('active', t==='visits');
-  if(t==='visits') loadVisits();
+  TABS.forEach(tb=>{
+    document.getElementById(tb+'Tab').style.display = (tb===t) ? 'block' : 'none';
+    document.getElementById('tab'+cap(tb)+'Btn').classList.toggle('active', tb===t);
+  });
+  if(t==='visits' && !visitsLoaded){ visitsLoaded = true; loadVisits(); }
+  if(t==='tasks' && !tasksLoaded){ tasksLoaded = true; loadTasks(); }
+  if(t==='payments' && !paymentsLoaded){ paymentsLoaded = true; loadPayments(); }
+  if(t==='docs' && !docsLoaded){ docsLoaded = true; renderDocForm(); }
 }
 
 /* ---------- Leads ---------- */
@@ -327,7 +457,7 @@ function renderLeads(){
   `).join('');
 }
 
-function esc(s){ return s==null? '' : String(s).replace(/[<>&]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c])); }
+function esc(s){ return s==null? '' : String(s).replace(/[<>&"']/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c])); }
 
 const FIELDS = [
   {k:'name', l:'שם מלא'}, {k:'phone', l:'טלפון'}, {k:'id_number', l:'ת.ז.'},
@@ -420,6 +550,308 @@ function renderVisits(){
       <td>${v.converted? '✅' : ''}</td>
     </tr>
   `).join('');
+}
+
+/* ---------- Tasks ---------- */
+async function loadTasks(){
+  document.getElementById('tasksList').innerHTML = '<div class="loading">טוען…</div>';
+  const r = await authFetch('/rest/v1/tasks?select=*&order=created_at.desc');
+  if(!r.ok){ document.getElementById('tasksList').innerHTML = '<div class="empty">שגיאה בטעינה</div>'; return; }
+  tasks = await r.json();
+  tasks.sort((a,b)=>{
+    if(!!a.done !== !!b.done) return a.done ? 1 : -1;
+    const ad = a.due_date || '9999-99-99', bd = b.due_date || '9999-99-99';
+    return ad.localeCompare(bd);
+  });
+  renderTasks();
+}
+
+function renderTasks(){
+  const list = document.getElementById('tasksList');
+  if(!tasks.length){ list.innerHTML = '<div class="empty">אין משימות</div>'; return; }
+  list.innerHTML = tasks.map(t=>`
+    <div class="taskItem ${t.done?'done':''}" data-id="${t.id}">
+      <input type="checkbox" class="taskDone" ${t.done?'checked':''}>
+      <div class="txt">${esc(t.text)}${t.due_date? ' <span class="due">· '+esc(t.due_date)+'</span>':''}</div>
+      ${t.client_name? `<button class="clientTag" data-client="${esc(t.client_name)}">${esc(t.client_name)}</button>`:''}
+      <button class="iconBtn taskEditBtn">✏️</button>
+    </div>
+  `).join('');
+  document.querySelectorAll('#tasksList .taskDone').forEach(cb=>{
+    cb.onchange = ()=> toggleTask(cb.closest('.taskItem').dataset.id, cb.checked);
+  });
+  document.querySelectorAll('#tasksList .taskEditBtn').forEach(btn=>{
+    btn.onclick = ()=> openTaskModal(btn.closest('.taskItem').dataset.id);
+  });
+  document.querySelectorAll('#tasksList .clientTag').forEach(btn=>{
+    btn.onclick = ()=> openClientFromTask(btn.dataset.client);
+  });
+}
+
+async function addTask(){
+  const text = document.getElementById('taskText').value.trim();
+  if(!text) return;
+  const client = document.getElementById('taskClient').value.trim();
+  const due = document.getElementById('taskDue').value;
+  const r = await authFetch('/rest/v1/tasks', {method:'POST', headers:{Prefer:'return=minimal'},
+    body: JSON.stringify({text, client_name: client||null, due_date: due||null, done:false})});
+  if(r.ok){
+    document.getElementById('taskText').value = '';
+    document.getElementById('taskClient').value = '';
+    document.getElementById('taskDue').value = '';
+    loadTasks();
+  } else alert('שגיאה בהוספה');
+}
+
+async function toggleTask(id, done){
+  await authFetch('/rest/v1/tasks?id=eq.'+id, {method:'PATCH', headers:{Prefer:'return=minimal'}, body: JSON.stringify({done})});
+  const t = tasks.find(x=>x.id===id); if(t) t.done = done;
+  renderTasks();
+}
+
+function openTaskModal(id){
+  currentTask = tasks.find(t=>t.id===id) || null;
+  if(!currentTask) return;
+  const grid = document.getElementById('taskModalGrid');
+  grid.innerHTML = `
+    <div class="full"><label>משימה</label><textarea data-k="text">${esc(currentTask.text)}</textarea></div>
+    <div><label>שם ליד</label><input data-k="client_name" type="text" value="${esc(currentTask.client_name)}"></div>
+    <div><label>תאריך יעד</label><input data-k="due_date" type="date" value="${esc(currentTask.due_date)}"></div>
+  `;
+  document.getElementById('taskOverlay').classList.add('show');
+}
+function closeTaskModal(){ document.getElementById('taskOverlay').classList.remove('show'); }
+
+async function saveTaskModal(){
+  if(!currentTask) return;
+  const obj = {};
+  document.querySelectorAll('#taskModalGrid [data-k]').forEach(el=>{ obj[el.dataset.k] = el.value || null; });
+  const r = await authFetch('/rest/v1/tasks?id=eq.'+currentTask.id, {method:'PATCH', headers:{Prefer:'return=minimal'}, body: JSON.stringify(obj)});
+  if(r.ok){ closeTaskModal(); loadTasks(); } else alert('שגיאה בשמירה');
+}
+
+async function deleteTask(){
+  if(!currentTask) return;
+  if(!confirm('למחוק את המשימה?')) return;
+  const r = await authFetch('/rest/v1/tasks?id=eq.'+currentTask.id, {method:'DELETE'});
+  if(r.ok){ closeTaskModal(); loadTasks(); } else alert('שגיאה במחיקה');
+}
+
+function openClientFromTask(name){
+  const lead = leads.find(l=> (l.name||'').trim() === (name||'').trim());
+  if(!lead){ alert('לא נמצא ליד בשם זה ברשימת הלידים'); return; }
+  switchTab('leads');
+  openModal(lead.id);
+}
+
+/* ---------- Payments ---------- */
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+
+function channelOf(l){
+  const chs = (l.channels||'').split(',').map(s=>s.trim());
+  for(const c of ['ישיר','ליברה','שוירץ']) if(chs.includes(c)) return c;
+  return 'לא ידוע';
+}
+
+async function loadPayments(){
+  document.getElementById('paymentStats').innerHTML = '<div class="loading">טוען…</div>';
+  const r = await authFetch('/rest/v1/expenses?select=*&order=date.desc');
+  expenses = r.ok ? await r.json() : [];
+  renderPayments();
+}
+
+function renderPayments(){
+  const received = leads.reduce((s,l)=> s+num(l.paid_to_avi), 0);
+  const gifts = leads.reduce((s,l)=> s+num(l.commission_to_client), 0);
+  const expTotal = expenses.reduce((s,e)=> s+num(e.amount), 0);
+  const net = received - gifts - expTotal;
+  document.getElementById('paymentStats').innerHTML = `
+    <div class="stat"><div class="num">${received.toLocaleString()} ₪</div><div class="lbl">סה"כ התקבל</div></div>
+    <div class="stat"><div class="num">${gifts.toLocaleString()} ₪</div><div class="lbl">מתנות ללקוחות</div></div>
+    <div class="stat"><div class="num">${expTotal.toLocaleString()} ₪</div><div class="lbl">הוצאות</div></div>
+    <div class="stat"><div class="num">${net.toLocaleString()} ₪</div><div class="lbl">רווח נטו</div></div>
+  `;
+
+  const byChan = {};
+  leads.forEach(l=>{
+    if(!num(l.paid_to_avi)) return;
+    const c = channelOf(l);
+    byChan[c] = byChan[c] || {sum:0, n:0};
+    byChan[c].sum += num(l.paid_to_avi); byChan[c].n++;
+  });
+  const chBody = document.getElementById('channelBody');
+  const chEntries = Object.entries(byChan);
+  chBody.innerHTML = chEntries.length
+    ? chEntries.map(([c,v])=>`<tr><td>${esc(c)}</td><td>${v.sum.toLocaleString()} ₪</td><td>${v.n}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="empty">אין נתונים</td></tr>';
+
+  const byMonth = {};
+  leads.forEach(l=>{
+    if(!num(l.paid_to_avi) || !l.close_date) return;
+    const mo = String(l.close_date).slice(0,7);
+    byMonth[mo] = (byMonth[mo]||0) + num(l.paid_to_avi);
+  });
+  const moBody = document.getElementById('monthBody');
+  const moEntries = Object.entries(byMonth).sort((a,b)=> b[0].localeCompare(a[0]));
+  moBody.innerHTML = moEntries.length
+    ? moEntries.map(([m,v])=>`<tr><td>${esc(m)}</td><td>${v.toLocaleString()} ₪</td></tr>`).join('')
+    : '<tr><td colspan="2" class="empty">אין נתונים</td></tr>';
+
+  renderCalc();
+  renderExpenses();
+}
+
+function renderCalc(){
+  const ch = document.getElementById('calcChannel').value;
+  const val = num(document.getElementById('calcValue').value);
+  const mivne = document.getElementById('calcMivne').checked;
+  let result = 0;
+  if(ch==='ישיר'){
+    if(val<=1200000) result=450; else if(val<=1500000) result=550; else if(val<=2000000) result=700; else result=1000;
+    if(mivne) result += 100;
+  } else if(ch==='ליברה'){
+    result = mivne ? 100 : (val>=20 ? 300 : (val>=15 ? 200 : 100));
+  } else if(ch==='שוירץ'){
+    result = val < 75 ? val*3 : val*4;
+  }
+  document.getElementById('calcResult').textContent = result ? Math.round(result).toLocaleString()+' ₪' : '-';
+}
+
+function renderExpenses(){
+  const body = document.getElementById('expensesBody');
+  if(!expenses.length){ body.innerHTML = '<tr><td colspan="5" class="empty">אין הוצאות</td></tr>'; return; }
+  body.innerHTML = expenses.map(e=>`
+    <tr data-id="${e.id}">
+      <td>${esc(e.date)}</td><td>${esc(e.type)}</td><td>${esc(e.payee)}</td>
+      <td>${num(e.amount).toLocaleString()} ₪</td>
+      <td><button class="iconBtn expDelBtn">מחיקה</button></td>
+    </tr>
+  `).join('');
+  document.querySelectorAll('#expensesBody .expDelBtn').forEach(btn=>{
+    btn.onclick = ()=> deleteExpense(btn.closest('tr').dataset.id);
+  });
+}
+
+async function addExpense(){
+  const date = document.getElementById('expDate').value || new Date().toISOString().slice(0,10);
+  const type = document.getElementById('expType').value;
+  const payee = document.getElementById('expPayee').value.trim();
+  const amount = num(document.getElementById('expAmount').value);
+  if(!amount){ alert('נא להזין סכום'); return; }
+  const r = await authFetch('/rest/v1/expenses', {method:'POST', headers:{Prefer:'return=minimal'},
+    body: JSON.stringify({date, type, payee: payee||null, amount})});
+  if(r.ok){
+    document.getElementById('expPayee').value = '';
+    document.getElementById('expAmount').value = '';
+    loadPayments();
+  } else alert('שגיאה בהוספה');
+}
+
+async function deleteExpense(id){
+  if(!confirm('למחוק את ההוצאה?')) return;
+  const r = await authFetch('/rest/v1/expenses?id=eq.'+id, {method:'DELETE'});
+  if(r.ok) loadPayments(); else alert('שגיאה במחיקה');
+}
+
+/* ---------- Docs ---------- */
+function printDoc(title, bodyHtml){
+  const w = window.open('', '_blank');
+  w.document.write(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#1b1f27}
+      h1{font-size:1.3rem;border-bottom:2px solid #a9822f;padding-bottom:10px}
+      table{width:100%;border-collapse:collapse;margin-top:16px}
+      th,td{border:1px solid #ccc;padding:8px 10px;text-align:right}
+      .row{margin:6px 0}
+      .label{color:#6b6456;font-size:.85rem}
+    </style></head><body>${bodyHtml}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(), 300);
+}
+
+function renderDocForm(){
+  const t = document.getElementById('docType').value;
+  const wrap = document.getElementById('docForm');
+  document.getElementById('libraRowsWrap').style.display = t==='libra' ? 'block' : 'none';
+  const today = new Date().toISOString().slice(0,10);
+  if(t==='receipt'){
+    wrap.innerHTML = `
+      <div><label>מאת (שם החברה/הלקוח)</label><input id="docFrom" type="text"></div>
+      <div><label>תאריך</label><input id="docDate" type="date" value="${today}"></div>
+      <div><label>סכום</label><input id="docAmount" type="number"></div>
+      <div class="full"><label>הערה</label><textarea id="docNote"></textarea></div>
+    `;
+  } else if(t==='libra'){
+    wrap.innerHTML = `<div><label>תאריך</label><input id="docDate" type="date" value="${today}"></div>`;
+    document.getElementById('libraRows').innerHTML = '';
+    addLibraRow();
+  } else if(t==='yashir'){
+    wrap.innerHTML = `
+      <div><label>שם הלקוח</label><input id="docName" type="text"></div>
+      <div><label>סכום משכנתא</label><input id="docMortgage" type="number"></div>
+      <div><label>ת.ז. (אופציונלי)</label><input id="docIdn" type="text"></div>
+      <div><label>טלפון (אופציונלי)</label><input id="docPhone" type="text"></div>
+    `;
+  }
+}
+
+function addLibraRow(){
+  const row = document.createElement('div');
+  row.className = 'modalGrid libraRow';
+  row.innerHTML = `
+    <div><label>שם</label><input class="lrName" type="text"></div>
+    <div><label>תיאור</label><input class="lrDesc" type="text"></div>
+    <div><label>סכום</label><input class="lrAmount" type="number"></div>
+  `;
+  document.getElementById('libraRows').appendChild(row);
+}
+
+function generateDoc(){
+  const t = document.getElementById('docType').value;
+  if(t==='receipt'){
+    const from = esc(document.getElementById('docFrom').value);
+    const date = esc(document.getElementById('docDate').value);
+    const amount = num(document.getElementById('docAmount').value).toLocaleString();
+    const note = esc(document.getElementById('docNote').value);
+    printDoc('קבלה', `
+      <h1>קבלה</h1>
+      <div class="row"><b>אביחי מזוז — עוסק פטור A.M.F 204231658</b></div>
+      <div class="row label">תאריך: ${date}</div>
+      <div class="row">התקבל מאת: ${from}</div>
+      <div class="row">סכום: ${amount} ₪</div>
+      ${note? `<div class="row">הערה: ${note}</div>`:''}
+    `);
+  } else if(t==='libra'){
+    const date = esc(document.getElementById('docDate').value);
+    const rows = Array.from(document.querySelectorAll('#libraRows .libraRow')).map(r=>({
+      name: esc(r.querySelector('.lrName').value),
+      desc: esc(r.querySelector('.lrDesc').value),
+      amount: num(r.querySelector('.lrAmount').value)
+    })).filter(r=>r.name || r.amount);
+    const total = rows.reduce((s,r)=>s+r.amount,0);
+    printDoc('דרישת תשלום — ליברה', `
+      <h1>דרישת תשלום — ליברה</h1>
+      <div class="row label">תאריך: ${date}</div>
+      <table><thead><tr><th>שם</th><th>תיאור</th><th>סכום</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.desc}</td><td>${r.amount.toLocaleString()} ₪</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="2"><b>סה"כ</b></td><td><b>${total.toLocaleString()} ₪</b></td></tr></tfoot>
+      </table>
+    `);
+  } else if(t==='yashir'){
+    const name = esc(document.getElementById('docName').value);
+    const mortgage = num(document.getElementById('docMortgage').value).toLocaleString();
+    const idn = esc(document.getElementById('docIdn').value);
+    const phone = esc(document.getElementById('docPhone').value);
+    printDoc('ליד לישיר - '+name, `
+      <h1>טופס ליד — ביטוח ישיר</h1>
+      <div class="row">שם הלקוח: ${name}</div>
+      ${idn? `<div class="row">תעודת זהות: ${idn}</div>`:''}
+      ${phone? `<div class="row">טלפון: ${phone}</div>`:''}
+      <div class="row">סכום משכנתא: ${mortgage} ₪</div>
+      <div class="row label">תאריך: ${new Date().toLocaleDateString('he-IL')}</div>
+    `);
+  }
 }
 
 /* ---------- Boot ---------- */

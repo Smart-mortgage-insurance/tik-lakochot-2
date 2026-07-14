@@ -786,9 +786,9 @@ function renderDocForm(){
   document.getElementById('libraRowsWrap').style.display = t==='libra' ? 'block' : 'none';
   const today = new Date().toISOString().slice(0,10);
   if(t==='receipt'){
-    const fromOptions = ['ליברה חברה לביטוח בע"מ','איי.די.איי חברה לביטוח בע"מ', ...new Set((leads||[]).map(l=>l.name).filter(Boolean))];
+    const fromOptions = ['ליברה חברה לביטוח בע"מ','איי.די.איי חברה לביטוח בע"מ','שוירץ'];
     wrap.innerHTML = `
-      <div class="full"><label>מאת (שם החברה/הלקוח) — ניתן לבחור מהרשימה או להקליד חופשי</label>
+      <div class="full"><label>מאת (חברה) — ניתן לבחור מהרשימה או להקליד חופשי</label>
         <input id="docFrom" type="text" list="docFromList" autocomplete="off">
         <datalist id="docFromList">${fromOptions.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
       </div>

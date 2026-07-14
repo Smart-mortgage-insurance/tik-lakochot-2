@@ -786,8 +786,12 @@ function renderDocForm(){
   document.getElementById('libraRowsWrap').style.display = t==='libra' ? 'block' : 'none';
   const today = new Date().toISOString().slice(0,10);
   if(t==='receipt'){
+    const fromOptions = ['ליברה חברה לביטוח בע"מ','איי.די.איי חברה לביטוח בע"מ', ...new Set((leads||[]).map(l=>l.name).filter(Boolean))];
     wrap.innerHTML = `
-      <div><label>מאת (שם החברה/הלקוח)</label><input id="docFrom" type="text"></div>
+      <div class="full"><label>מאת (שם החברה/הלקוח) — ניתן לבחור מהרשימה או להקליד חופשי</label>
+        <input id="docFrom" type="text" list="docFromList" autocomplete="off">
+        <datalist id="docFromList">${fromOptions.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
+      </div>
       <div><label>תאריך</label><input id="docDate" type="date" value="${today}"></div>
       <div><label>סכום</label><input id="docAmount" type="number"></div>
       <div class="full"><label>הערה</label><textarea id="docNote"></textarea></div>
@@ -813,6 +817,9 @@ function addLibraRow(){
     <div><label>שם</label><input class="lrName" type="text"></div>
     <div><label>תיאור</label><input class="lrDesc" type="text"></div>
     <div><label>סכום</label><input class="lrAmount" type="number"></div>
+    <div style="display:flex;align-items:flex-end">
+      <button type="button" class="iconBtn" title="מחק שורה" onclick="this.closest('.libraRow').remove()">🗑 מחק שורה</button>
+    </div>
   `;
   document.getElementById('libraRows').appendChild(row);
 }

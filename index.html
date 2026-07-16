@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>מערכת לידים · אביחי מזוז</title>
+<title>מערכת לידים · ביטוחי משכנתא </title>
 <style>
   :root{
     --bg:#f4f1ea; --bg2:#ffffff; --ink:#1b1f27; --sub:#6b6456; --line:#e4ddcc;
@@ -245,7 +245,6 @@
       <div class="taskForm">
         <input type="date" id="expDate">
         <select id="expType">
-          <option value="מתנה ללקוח">מתנה ללקוח</option>
           <option value="פרסום">פרסום</option>
           <option value="תשלום למפנה">תשלום למפנה</option>
           <option value="אחר">אחר</option>
@@ -320,7 +319,7 @@
 const SUPA_URL = "https://ktcabahjyjmtfavlsdks.supabase.co";
 const SUPA_KEY = "sb_publishable_jYj0az-JCWUc3ga1fRYcew_La1y7qVw";
 const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz5ZVsmDBGRvs56AjDZBUK3hTriVER2Q1H4841LdW7U11kyJv-AFzotFaPSrgA3qy8vGA/exec";
-const STATUSES = ["ליד חדש","ממתין לשליחת ליד","נשלח לליברה","נשלח לישיר","נשלח לשוירץ","בטיפול","נסגר","סירוב","ביטול"];
+const STATUSES = ["ליד חדש","ממתין לשליחת ליד","נשלח לליברה","נשלח לישיר","נשלח לשוירץ","נסגר בליברה","נסגר בישיר","נסגר בשוירץ"];
 
 let session = null;
 let leads = [];
@@ -493,7 +492,7 @@ const FIELDS = [
   {k:'status', l:'סטטוס', type:'select', opts:STATUSES},
   {k:'channels', l:'ערוצים (ישיר/ליברה/שוירץ)'}, {k:'referral_source', l:'מקור הפניה'},
   {k:'lead_date', l:'תאריך ליד', type:'date'}, {k:'close_date', l:'תאריך סגירה', type:'date'},
-  {k:'paid_to_avi', l:'שולם לאביחי'}, {k:'commission_to_client', l:'עמלה/מתנה ללקוח'},
+  {k:'paid_to_avi', l: {k:'commission_to_client', l:'עמלה/מתנה ללקוח'},
   {k:'source', l:'מקור הליד'},
   {k:'notes', l:'הערות', type:'textarea', full:true}
 ];
@@ -815,7 +814,7 @@ function renderDocForm(){
   document.getElementById('libraRowsWrap').style.display = t==='libra' ? 'block' : 'none';
   const today = new Date().toISOString().slice(0,10);
   if(t==='receipt'){
-    const fromOptions = ['ליברה חברה לביטוח בע"מ','איי.די.איי חברה לביטוח בע"מ','שוירץ'];
+    const fromOptions = ['ליברה חברה לביטוח בע"מ','איי.די.איי חברה לביטוח בע"מ ח.פ. 513910703','שוירץ'];
     wrap.innerHTML = `
       <div class="full"><label>מאת (חברה) — ניתן לבחור מהרשימה או להקליד חופשי</label>
         <input id="docFrom" type="text" list="docFromList" autocomplete="off">

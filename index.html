@@ -1353,8 +1353,9 @@ function docFromValue(){
 function libraRowsData(){
   return Array.from(document.querySelectorAll('#libraRows .libraRow')).map(r=>({
     name: r.querySelector('.lrName').value,
-    amount: r.querySelector('.lrAmount').value
-  })).filter(r=> r.name || r.amount);
+    amount: r.querySelector('.lrAmount').value,
+    note: r.querySelector('.lrNote').value
+  })).filter(r=> r.name || r.amount || r.note);
 }
 
 let libraSaveTimer = null;
@@ -1385,9 +1386,12 @@ function addLibraRow(data, skipSave){
   data = data || {};
   const row = document.createElement('div');
   row.className = 'modalGrid libraRow';
+  /* The note is yours alone — nothing ever writes into it automatically, so
+     whatever you type on a row stays exactly as you left it. */
   row.innerHTML = `
     <div><label>שם הלקוח</label><input class="lrName" type="text" value="${esc(data.name||'')}"></div>
     <div><label>סכום</label><input class="lrAmount" type="number" value="${esc(data.amount||'')}"></div>
+    <div><label>הערה</label><input class="lrNote" type="text" value="${esc(data.note||'')}" placeholder="למילוי ידני"></div>
     <div style="display:flex;align-items:flex-end">
       <button type="button" class="iconBtn lrDel" title="מחק שורה">🗑 מחק שורה</button>
     </div>
@@ -1462,15 +1466,18 @@ function generateDoc(){
     const date = new Date().toLocaleDateString('he-IL');
     const rows = Array.from(document.querySelectorAll('#libraRows .libraRow')).map(r=>({
       name: esc(r.querySelector('.lrName').value),
-      amount: num(r.querySelector('.lrAmount').value)
-    })).filter(r=>r.name || r.amount);
+      amount: num(r.querySelector('.lrAmount').value),
+      note: esc(r.querySelector('.lrNote').value)
+    })).filter(r=>r.name || r.amount || r.note);
     const total = rows.reduce((s,r)=>s+r.amount,0);
+    /* the note column only appears on the printed page if something is in it */
+    const anyNote = rows.some(r=> r.note.trim());
     printDoc('דרישת תשלום — ליברה', `
       <h1>דרישת תשלום — ליברה</h1>
       <div class="row label">תאריך: ${date}</div>
-      <table><thead><tr><th>שם הלקוח</th><th>סכום</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.amount.toLocaleString()} ₪</td></tr>`).join('')}</tbody>
-      <tfoot><tr><td><b>סה"כ</b></td><td><b>${total.toLocaleString()} ₪</b></td></tr></tfoot>
+      <table><thead><tr><th>שם הלקוח</th><th>סכום</th>${anyNote?'<th>הערה</th>':''}</tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.amount.toLocaleString()} ₪</td>${anyNote?`<td>${r.note}</td>`:''}</tr>`).join('')}</tbody>
+      <tfoot><tr><td><b>סה"כ</b></td><td><b>${total.toLocaleString()} ₪</b></td>${anyNote?'<td></td>':''}</tr></tfoot>
       </table>
     `);
   } else if(t==='yashir'){

@@ -172,6 +172,7 @@
       <button id="tabTasksBtn" onclick="switchTab('tasks')">משימות</button>
       <button id="tabPaymentsBtn" onclick="switchTab('payments')">תשלומים</button>
       <button id="tabDocsBtn" onclick="switchTab('docs')">מסמכים</button>
+      <button id="tabFilesBtn" onclick="switchTab('files')">קבצים</button>
       <button id="tabMailBtn" onclick="switchTab('mail')">📧 תיבת דואר</button>
     </div>
     <div class="spacer"></div>
@@ -289,6 +290,25 @@
       </div>
     </section>
 
+    <section id="filesTab" style="display:none">
+      <div class="toolbar">
+        <select id="fileBucket" onchange="loadFiles()">
+          <option value="ads">קבצי פרסום</option>
+          <option value="forms">טפסים</option>
+        </select>
+        <input type="text" id="fileName" placeholder="שם הקובץ (אופציונלי)">
+        <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
+        <button class="btn btnGold" onclick="document.getElementById('fileInput').click()">⬆ העלאת קובץ</button>
+      </div>
+      <div id="uploadStatus" class="calcNote"></div>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>שם הקובץ</th><th>גודל</th><th>הועלה</th><th></th></tr></thead>
+          <tbody id="filesBody"><tr><td colspan="4" class="loading">טוען…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
     <section id="mailTab" style="display:none">
       <div id="mailList"><div class="loading">טוען…</div></div>
     </section>
@@ -338,6 +358,7 @@ let visits = [];
 let tasks = [];
 let expenses = [];
 let mail = [];
+let files = [];
 let currentLead = null;
 let currentTask = null;
 let taskOrder = [];
@@ -348,6 +369,7 @@ let tasksLoaded = false;
 let paymentsLoaded = false;
 let docsLoaded = false;
 let mailLoaded = false;
+let filesLoaded = false;
 
 /* ---------- Drag to reorder (mouse + touch) ----------
    Touch needs a short press-and-hold before the drag takes over, otherwise the
@@ -566,7 +588,7 @@ function showApp(){
 }
 
 /* ---------- Tabs ---------- */
-const TABS = ['leads','visits','tasks','payments','docs','mail'];
+const TABS = ['leads','visits','tasks','payments','docs','files','mail'];
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function switchTab(t){
   TABS.forEach(tb=>{
@@ -577,6 +599,7 @@ function switchTab(t){
   if(t==='tasks' && !tasksLoaded){ tasksLoaded = true; loadTasks(); }
   if(t==='payments' && !paymentsLoaded){ paymentsLoaded = true; loadPayments(); }
   if(t==='docs' && !docsLoaded){ docsLoaded = true; renderDocForm(); }
+  if(t==='files' && !filesLoaded){ filesLoaded = true; loadFiles(); }
   if(t==='mail' && !mailLoaded){ mailLoaded = true; loadMail(); }
 }
 
@@ -1173,6 +1196,103 @@ function showToast(msg, isErr){
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=> t.classList.remove('show'), 3500);
+}
+
+/* ---------- Files (Supabase Storage) ----------
+   Two private buckets: `ads` for advertising material, `forms` for paperwork.
+   Downloads go through a short-lived signed URL, so nothing is public. */
+function bucket_(){ return document.getElementById('fileBucket').value; }
+
+function humanSize_(b){
+  if(b == null) return '';
+  if(b < 1024) return b + ' B';
+  if(b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+async function loadFiles(){
+  const body = document.getElementById('filesBody');
+  body.innerHTML = '<tr><td colspan="4" class="loading">טוען…</td></tr>';
+  const r = await authFetch('/storage/v1/object/list/' + bucket_(), {
+    method:'POST',
+    body: JSON.stringify({prefix:'', limit:200, sortBy:{column:'created_at', order:'desc'}})
+  });
+  if(!r.ok){ body.innerHTML = '<tr><td colspan="4" class="empty">שגיאה בטעינת הקבצים</td></tr>'; return; }
+  files = (await r.json()).filter(f=> f.name && f.name !== '.emptyFolderPlaceholder');
+  renderFiles();
+}
+
+function renderFiles(){
+  const body = document.getElementById('filesBody');
+  if(!files.length){ body.innerHTML = '<tr><td colspan="4" class="empty">אין קבצים בתיקייה הזו</td></tr>'; return; }
+  body.innerHTML = files.map(f=>{
+    const size = f.metadata ? f.metadata.size : null;
+    const when = f.created_at ? new Date(f.created_at).toLocaleDateString('he-IL') : '';
+    return `<tr data-name="${esc(f.name)}">
+      <td>${esc(f.name)}</td>
+      <td>${humanSize_(size)}</td>
+      <td>${when}</td>
+      <td>
+        <button class="iconBtn fileGetBtn">⬇ פתיחה</button>
+        <button class="iconBtn fileDelBtn">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+  body.querySelectorAll('.fileGetBtn').forEach(b=>{
+    b.onclick = ()=> openFile(b.closest('tr').dataset.name);
+  });
+  body.querySelectorAll('.fileDelBtn').forEach(b=>{
+    b.onclick = ()=> deleteFile(b.closest('tr').dataset.name);
+  });
+}
+
+async function uploadFile(){
+  const input = document.getElementById('fileInput');
+  const status = document.getElementById('uploadStatus');
+  const file = input.files && input.files[0];
+  if(!file) return;
+
+  const typed = document.getElementById('fileName').value.trim();
+  /* keep the original extension even when the user renames the file */
+  const ext = (file.name.match(/\.[^.]+$/)||[''])[0];
+  let name = typed ? (typed.endsWith(ext) ? typed : typed + ext) : file.name;
+  name = name.replace(/[\/\\]/g, '-');
+
+  status.textContent = 'מעלה את ' + name + '…';
+  const r = await authFetch('/storage/v1/object/' + bucket_() + '/' + encodeURIComponent(name), {
+    method:'POST',
+    headers:{'Content-Type': file.type || 'application/octet-stream', 'x-upsert':'true'},
+    body: file
+  });
+  input.value = '';
+  if(r.ok){
+    document.getElementById('fileName').value = '';
+    status.textContent = '';
+    showToast('✅ הקובץ הועלה');
+    loadFiles();
+  } else {
+    status.textContent = '';
+    let msg = '';
+    try{ msg = (await r.json()).message || ''; }catch(e){}
+    showToast('שגיאה בהעלאה' + (msg ? ': ' + msg : ''), true);
+  }
+}
+
+/* Private buckets need a signed URL; 60s is plenty to hand off to the browser. */
+async function openFile(name){
+  const r = await authFetch('/storage/v1/object/sign/' + bucket_() + '/' + encodeURIComponent(name), {
+    method:'POST', body: JSON.stringify({expiresIn:60})
+  });
+  if(!r.ok){ showToast('שגיאה בפתיחת הקובץ', true); return; }
+  const d = await r.json();
+  window.open(SUPA_URL + '/storage/v1' + d.signedURL, '_blank');
+}
+
+async function deleteFile(name){
+  if(!confirm('למחוק את "' + name + '"?')) return;
+  const r = await authFetch('/storage/v1/object/' + bucket_() + '/' + encodeURIComponent(name), {method:'DELETE'});
+  if(r.ok){ showToast('✅ הקובץ נמחק'); loadFiles(); }
+  else showToast('שגיאה במחיקה', true);
 }
 
 /* ---------- Mail (Apps Script Web App) ---------- */

@@ -1200,7 +1200,9 @@ function renderDocForm(){
       <div class="full"><label>הערה</label><textarea id="docNote"></textarea></div>
     `;
   } else if(t==='libra'){
-    wrap.innerHTML = `<div><label>תאריך</label><input id="docDate" type="date" value="${today}"></div>`;
+    /* name and amount are the only things Daniel needs; the document carries
+       today's date on its own so there is nothing to fill in here */
+    wrap.innerHTML = '';
     restoreLibraRows();
   } else if(t==='yashir'){
     wrap.innerHTML = `
@@ -1237,9 +1239,8 @@ function docFromValue(){
 function libraRowsData(){
   return Array.from(document.querySelectorAll('#libraRows .libraRow')).map(r=>({
     name: r.querySelector('.lrName').value,
-    desc: r.querySelector('.lrDesc').value,
     amount: r.querySelector('.lrAmount').value
-  })).filter(r=> r.name || r.desc || r.amount);
+  })).filter(r=> r.name || r.amount);
 }
 
 let libraSaveTimer = null;
@@ -1271,8 +1272,7 @@ function addLibraRow(data, skipSave){
   const row = document.createElement('div');
   row.className = 'modalGrid libraRow';
   row.innerHTML = `
-    <div><label>שם</label><input class="lrName" type="text" value="${esc(data.name||'')}"></div>
-    <div><label>תיאור</label><input class="lrDesc" type="text" value="${esc(data.desc||'')}"></div>
+    <div><label>שם הלקוח</label><input class="lrName" type="text" value="${esc(data.name||'')}"></div>
     <div><label>סכום</label><input class="lrAmount" type="number" value="${esc(data.amount||'')}"></div>
     <div style="display:flex;align-items:flex-end">
       <button type="button" class="iconBtn lrDel" title="מחק שורה">🗑 מחק שורה</button>
@@ -1323,7 +1323,7 @@ async function addLeadToLibraForm(){
     showToast('הלקוח כבר נמצא בדרישת התשלום', true);
     return;
   }
-  rows.push({name: currentLead.name || '', desc: currentLead.close_date ? ('נסגר ' + currentLead.close_date) : '', amount: String(amount)});
+  rows.push({name: currentLead.name || '', amount: String(amount)});
   await saveOrder_('libra_form', 'leads2_libra_form', rows);
   showToast('✅ נוסף לדרישת התשלום');
   if(document.getElementById('docType').value === 'libra') restoreLibraRows();
@@ -1345,19 +1345,18 @@ function generateDoc(){
       ${note? `<div class="row">הערה: ${note}</div>`:''}
     `);
   } else if(t==='libra'){
-    const date = esc(document.getElementById('docDate').value);
+    const date = new Date().toLocaleDateString('he-IL');
     const rows = Array.from(document.querySelectorAll('#libraRows .libraRow')).map(r=>({
       name: esc(r.querySelector('.lrName').value),
-      desc: esc(r.querySelector('.lrDesc').value),
       amount: num(r.querySelector('.lrAmount').value)
     })).filter(r=>r.name || r.amount);
     const total = rows.reduce((s,r)=>s+r.amount,0);
     printDoc('דרישת תשלום — ליברה', `
       <h1>דרישת תשלום — ליברה</h1>
       <div class="row label">תאריך: ${date}</div>
-      <table><thead><tr><th>שם</th><th>תיאור</th><th>סכום</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.desc}</td><td>${r.amount.toLocaleString()} ₪</td></tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="2"><b>סה"כ</b></td><td><b>${total.toLocaleString()} ₪</b></td></tr></tfoot>
+      <table><thead><tr><th>שם הלקוח</th><th>סכום</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.amount.toLocaleString()} ₪</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td><b>סה"כ</b></td><td><b>${total.toLocaleString()} ₪</b></td></tr></tfoot>
       </table>
     `);
   } else if(t==='yashir'){

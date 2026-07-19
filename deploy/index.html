@@ -155,6 +155,14 @@
   .mailItem .date{color:var(--sub);font-size:.78rem;white-space:nowrap}
   .mailItem .snippet{color:var(--sub);font-size:.85rem}
   .unreadDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);margin-inline-end:6px}
+  .mailItem{cursor:pointer}
+  .mailItem:hover{border-color:var(--gold)}
+  .mailBody{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  .mailMsg{border-bottom:1px dashed var(--line);padding:10px 0}
+  .mailMsg:last-of-type{border-bottom:none}
+  .mailMsgHead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.8rem;color:var(--sub);margin-bottom:6px}
+  .mailMsgBody{font-size:.85rem;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow-y:auto}
+  .mailOpen{display:inline-block;margin-top:10px;font-size:.82rem;color:var(--gold);font-weight:600}
 
   /* read-only value in the lead card */
   .roVal{padding:9px 11px;border-radius:9px;background:var(--chip);border:1px solid var(--line);font-size:.9rem;white-space:pre-wrap;word-break:break-word}
@@ -346,6 +354,10 @@
     </section>
 
     <section id="mailTab" style="display:none">
+      <div class="toolbar">
+        <input type="text" id="mailSearch" placeholder="חיפוש במיילים…" oninput="renderMail()">
+        <button class="iconBtn" onclick="loadMail()">🔄 רענון</button>
+      </div>
       <div id="mailList"><div class="loading">טוען…</div></div>
     </section>
   </main>
@@ -1662,17 +1674,68 @@ async function loadMail(){
 function renderMail(){
   const list = document.getElementById('mailList');
   if(!mail.length){ list.innerHTML = '<div class="empty">אין מיילים להצגה</div>'; return; }
-  const sorted = mail.slice().sort((a,b)=> new Date(b.date) - new Date(a.date));
+  const q = (document.getElementById('mailSearch').value||'').trim().toLowerCase();
+  let sorted = mail.slice().sort((a,b)=> new Date(b.date) - new Date(a.date));
+  if(q) sorted = sorted.filter(m=>
+    [m.subject, m.from, m.snippet].filter(Boolean).join(' ').toLowerCase().includes(q));
+  if(!sorted.length){ list.innerHTML = '<div class="empty">לא נמצאו מיילים</div>'; return; }
+
   list.innerHTML = sorted.map(m=>`
-    <div class="mailItem">
+    <div class="mailItem" data-id="${esc(m.id)}">
       <div class="mailTop">
-        <div class="subj">${m.unread? '<span class="unreadDot"></span>':''}${esc(m.subject)}</div>
-        <div class="date">${esc(m.date)}</div>
+        <div class="subj">${m.unread? '<span class="unreadDot"></span>':''}${esc(m.subject)||'(ללא נושא)'}</div>
+        <div class="date">${m.date? new Date(m.date).toLocaleString('he-IL') : ''}</div>
       </div>
-      <div class="from">${esc(m.from)}</div>
+      <div class="from">${esc(m.from)}${m.count>1? ' · '+m.count+' הודעות' : ''}</div>
       <div class="snippet">${esc(m.snippet)}</div>
+      <div class="mailBody" style="display:none"></div>
     </div>
   `).join('');
+
+  list.querySelectorAll('.mailItem').forEach(el=>{
+    el.onclick = e=>{
+      if(e.target.tagName === 'A') return;
+      toggleThread(el);
+    };
+  });
+}
+
+/* Threads load on demand — pulling every body up front would be slow and most
+   of them are never opened. */
+const threadCache = {};
+
+async function toggleThread(el){
+  const box = el.querySelector('.mailBody');
+  if(box.style.display === 'block'){ box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const id = el.dataset.id;
+
+  if(!threadCache[id]){
+    box.innerHTML = '<div class="loading">טוען שרשור…</div>';
+    if(!session) session = loadSession();
+    try{
+      const r = await fetch(WEBAPP_URL + '?action=thread&id=' + encodeURIComponent(id) +
+        '&token=' + encodeURIComponent(session? session.access_token : ''));
+      const d = await r.json();
+      if(!d.ok || !d.thread) throw new Error('no thread');
+      threadCache[id] = d.thread;
+    }catch(err){
+      box.innerHTML = '<div class="empty">לא הצלחתי לטעון את השרשור</div>';
+      return;
+    }
+  }
+
+  const t = threadCache[id];
+  box.innerHTML = t.messages.map(msg=>`
+    <div class="mailMsg">
+      <div class="mailMsgHead">
+        <span>${esc(msg.from)}</span>
+        <span class="date">${msg.date? new Date(msg.date).toLocaleString('he-IL') : ''}</span>
+      </div>
+      <div class="mailMsgBody">${esc(msg.body)}</div>
+    </div>
+  `).join('') +
+  `<a class="mailOpen" href="https://mail.google.com/mail/u/0/#all/${esc(id)}" target="_blank" rel="noopener">פתיחה ב-Gmail ↗</a>`;
 }
 
 /* ---------- Lead actions via Apps Script Web App ---------- */

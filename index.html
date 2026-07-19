@@ -794,26 +794,44 @@ function renderVisits(){
   });
 }
 
+/* PostgREST answers 200 even when RLS silently filtered every row away, so a
+   bare status check reports success for a delete that removed nothing. Ask for
+   the deleted rows back and count them — that is the only honest signal. */
+async function deleteVisitsWhere_(filter){
+  const r = await authFetch('/rest/v1/visits?' + filter, {
+    method:'DELETE', headers:{Prefer:'return=representation'}
+  });
+  if(!r.ok) return -1;
+  const rows = await r.json();
+  return Array.isArray(rows) ? rows.length : 0;
+}
+
+function reportDeleted_(n, noneMsg){
+  if(n < 0){ showToast('שגיאה במחיקה', true); return false; }
+  if(n === 0){ showToast(noneMsg, true); return false; }
+  showToast('✅ נמחקו ' + n + ' רשומות');
+  loadVisits();
+  return true;
+}
+
 async function deleteVisit(id){
   if(!confirm('למחוק את רשומת הכניסה?')) return;
-  const r = await authFetch('/rest/v1/visits?id=eq.'+id, {method:'DELETE'});
-  if(r.ok) loadVisits(); else showToast('שגיאה במחיקה', true);
+  const n = await deleteVisitsWhere_('id=eq.' + id);
+  reportDeleted_(n, 'הרשומה לא נמחקה — אין הרשאה');
 }
 
 async function deleteOldVisits(){
   if(!confirm('למחוק את כל רשומות הכניסות מלפני יותר מ־30 יום?')) return;
   const cutoff = new Date(Date.now() - 30*24*3600*1000).toISOString();
-  const r = await authFetch('/rest/v1/visits?ts=lt.'+encodeURIComponent(cutoff), {method:'DELETE'});
-  if(r.ok){ showToast('✅ הרשומות הישנות נמחקו'); loadVisits(); }
-  else showToast('שגיאה במחיקה', true);
+  const n = await deleteVisitsWhere_('ts=lt.' + encodeURIComponent(cutoff));
+  reportDeleted_(n, 'אין רשומות ישנות מ־30 יום');
 }
 
 async function deleteAllVisits(){
   if(!confirm('למחוק את כל נתוני הכניסות לצמיתות? הפעולה אינה הפיכה.')) return;
   if(!confirm('אישור אחרון — כל היסטוריית המבקרים תימחק. להמשיך?')) return;
-  const r = await authFetch('/rest/v1/visits?id=not.is.null', {method:'DELETE'});
-  if(r.ok){ showToast('✅ כל נתוני הכניסות נמחקו'); loadVisits(); }
-  else showToast('שגיאה במחיקה', true);
+  const n = await deleteVisitsWhere_('id=not.is.null');
+  reportDeleted_(n, 'לא נמחקה אף רשומה');
 }
 
 /* ---------- Tasks ---------- */

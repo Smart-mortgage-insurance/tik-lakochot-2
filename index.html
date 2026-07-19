@@ -290,6 +290,7 @@
       </div>
       <div style="margin-top:24px">
         <button class="btn btnGold" onclick="generateDoc()">הדפסה / שמירה כ-PDF</button>
+        <button class="btn btnGhost" id="clearLibraBtn" onclick="clearLibraForm()" style="display:none">🧹 נשלח — נקה את הטופס</button>
       </div>
     </section>
 
@@ -1180,6 +1181,7 @@ function renderDocForm(){
   const t = document.getElementById('docType').value;
   const wrap = document.getElementById('docForm');
   document.getElementById('libraRowsWrap').style.display = t==='libra' ? 'block' : 'none';
+  document.getElementById('clearLibraBtn').style.display = t==='libra' ? 'inline-block' : 'none';
   const today = new Date().toISOString().slice(0,10);
   if(t==='receipt'){
     const fromOptions = ['ליברה חברה לביטוח בע"מ','איי.די.איי חברה לביטוח בע"מ ח.פ. 513910703','שוירץ'];
@@ -1285,6 +1287,21 @@ function addLibraRow(data, skipSave){
   document.getElementById('libraRows').appendChild(row);
   if(!skipSave) saveLibraRows();
   return row;
+}
+
+/* Once the demand has actually been sent to Daniel the rows have served their
+   purpose and must not carry into the next one. Spell out what is being wiped —
+   this is the one destructive action in the docs tab. */
+async function clearLibraForm(){
+  const rows = libraRowsData();
+  if(!rows.length){ showToast('הטופס כבר ריק'); return; }
+  const total = rows.reduce((s,r)=> s + num(r.amount), 0);
+  const names = rows.map(r=> r.name || '(ללא שם)').join(', ');
+  if(!confirm('לנקות את דרישת התשלום?\n\n' + rows.length + ' שורות · סה"כ ' +
+              total.toLocaleString() + ' ₪\n' + names + '\n\nהפעולה אינה הפיכה.')) return;
+  await saveOrder_('libra_form', 'leads2_libra_form', []);
+  await restoreLibraRows();
+  showToast('✅ הטופס נוקה — מוכן לדרישה הבאה');
 }
 
 /* Send a closed lead straight into the payment demand from its card. */

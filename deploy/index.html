@@ -1324,9 +1324,13 @@ async function openFile(name){
   window.open(SUPA_URL + '/storage/v1' + d.signedURL, '_blank');
 }
 
+/* The single-object DELETE route rejects the JSON content-type authFetch always
+   sends, because that request has no body. The bulk route takes one, so use it. */
 async function deleteFile(name){
   if(!confirm('למחוק את "' + fromKey_(name) + '"?')) return;
-  const r = await authFetch('/storage/v1/object/' + bucket_() + '/' + encodeURIComponent(name), {method:'DELETE'});
+  const r = await authFetch('/storage/v1/object/' + bucket_(), {
+    method:'DELETE', body: JSON.stringify({prefixes:[name]})
+  });
   if(r.ok){ showToast('✅ הקובץ נמחק'); loadFiles(); }
   else showToast('שגיאה במחיקה', true);
 }

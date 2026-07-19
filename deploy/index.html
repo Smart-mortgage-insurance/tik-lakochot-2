@@ -64,10 +64,35 @@
   .cube .name{font-weight:700;font-size:1.02rem;margin-bottom:8px;word-break:break-word}
   .cube .meta{color:var(--sub);font-size:.8rem;margin-bottom:10px;display:flex;flex-direction:column;gap:2px}
   .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:.72rem;font-weight:700;background:var(--chip);color:var(--gold)}
-  .badge.new{color:var(--ok)}
-  .badge.wait{color:var(--warn)}
-  .badge.closed{color:var(--gold)}
-  .badge.lost{color:var(--danger)}
+  /* One colour per status so the board can be read at a glance. Each pairs a
+     tinted background with a deeper text tone; the dark-theme block below
+     re-tints them because these light washes vanish on a dark card. */
+  .badge.stNew{background:#dff3e6;color:#1e7a49}
+  .badge.stWait{background:#fdf0d5;color:#8a6116}
+  .badge.stLibra{background:#dfe9fb;color:#2b5197}
+  .badge.stYashir{background:#ece0f8;color:#6b3fa0}
+  .badge.stBoth{background:#d8f0f0;color:#1f6f6f}
+  .badge.stClosedLibra{background:#cfead8;color:#176c3a}
+  .badge.stClosedYashir{background:#f6e6c8;color:#8a5a12}
+  .badge.stIrrelevant{background:#f2e0e0;color:#9b3b3b}
+  :root[data-theme="dark"] .badge.stNew{background:#173226;color:#7fd6a4}
+  :root[data-theme="dark"] .badge.stWait{background:#33280f;color:#e8c069}
+  :root[data-theme="dark"] .badge.stLibra{background:#1a2440;color:#8fb2f0}
+  :root[data-theme="dark"] .badge.stYashir{background:#2a1e3d;color:#c4a0ee}
+  :root[data-theme="dark"] .badge.stBoth{background:#13302f;color:#79cfcb}
+  :root[data-theme="dark"] .badge.stClosedLibra{background:#14301f;color:#6cc98d}
+  :root[data-theme="dark"] .badge.stClosedYashir{background:#33270f;color:#dfb35f}
+  :root[data-theme="dark"] .badge.stIrrelevant{background:#331c1c;color:#e08a8a}
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .badge.stNew{background:#173226;color:#7fd6a4}
+    :root:not([data-theme="light"]) .badge.stWait{background:#33280f;color:#e8c069}
+    :root:not([data-theme="light"]) .badge.stLibra{background:#1a2440;color:#8fb2f0}
+    :root:not([data-theme="light"]) .badge.stYashir{background:#2a1e3d;color:#c4a0ee}
+    :root:not([data-theme="light"]) .badge.stBoth{background:#13302f;color:#79cfcb}
+    :root:not([data-theme="light"]) .badge.stClosedLibra{background:#14301f;color:#6cc98d}
+    :root:not([data-theme="light"]) .badge.stClosedYashir{background:#33270f;color:#dfb35f}
+    :root:not([data-theme="light"]) .badge.stIrrelevant{background:#331c1c;color:#e08a8a}
+  }
 
   .statRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
   .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
@@ -195,6 +220,13 @@
           <option value="ישיר">ישיר</option>
           <option value="ליברה">ליברה</option>
         </select>
+        <select id="sortBy" onchange="onSortChange()">
+          <option value="manual">סדר ידני (גרירה)</option>
+          <option value="date">לפי תאריך</option>
+          <option value="name">לפי שם</option>
+          <option value="status">לפי סטטוס</option>
+        </select>
+        <button class="iconBtn" id="sortDirBtn" onclick="toggleSortDir()" style="display:none"></button>
       </div>
       <div id="leadsGrid" class="grid"><div class="loading">טוען…</div></div>
     </section>
@@ -620,6 +652,7 @@ function showApp(){
   document.getElementById('app').style.display = 'flex';
   const sel = document.getElementById('statusFilter');
   STATUSES.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sel.appendChild(o); });
+  syncSortControls();
   loadLeads();
 }
 
@@ -678,12 +711,82 @@ async function loadLeads(){
   renderLeads();
 }
 
+const CHANNELS = ['', 'ליברה', 'ישיר', 'ליברה וישיר'];
+
+const STATUS_CLASS = {
+  'ליד חדש':            'stNew',
+  'ממתין לשליחת ליד':   'stWait',
+  'נשלח לליברה':        'stLibra',
+  'נשלח לישיר':         'stYashir',
+  'נשלח לליברה וישיר':  'stBoth',
+  'נסגר בליברה':        'stClosedLibra',
+  'נסגר בישיר':         'stClosedYashir',
+  'לא רלוונטי':         'stIrrelevant'
+};
+
 function badgeClass(status){
-  const s = status || '';
-  if(s.indexOf('נסגר') === 0) return 'closed';
-  if(s === 'ליד חדש') return 'new';
-  if(s === 'לא רלוונטי') return 'lost';
-  return 'wait';
+  const s = status || 'ליד חדש';
+  if(STATUS_CLASS[s]) return STATUS_CLASS[s];
+  /* anything unrecognised still gets a sensible family rather than no colour */
+  if(s.indexOf('נסגר') === 0) return 'stClosedLibra';
+  if(s.indexOf('נשלח') === 0) return 'stLibra';
+  return 'stWait';
+}
+
+/* Sorting sits alongside the manual drag order rather than replacing it: pick a
+   field and the drag order steps aside, go back to "ידני" and it returns. */
+let sortBy = localStorage.getItem('leads2_sortBy') || 'manual';
+let sortDir = localStorage.getItem('leads2_sortDir') || 'desc';
+
+function sortLabel(){
+  if(sortBy === 'name') return sortDir === 'asc' ? '↑ א-ת' : '↓ ת-א';
+  if(sortBy === 'date') return sortDir === 'asc' ? '↑ מהישן' : '↓ מהחדש';
+  return sortDir === 'asc' ? '↑ עולה' : '↓ יורד';
+}
+
+function syncSortControls(){
+  document.getElementById('sortBy').value = sortBy;
+  const btn = document.getElementById('sortDirBtn');
+  btn.style.display = sortBy === 'manual' ? 'none' : 'inline-block';
+  btn.textContent = sortLabel();
+}
+
+function onSortChange(){
+  sortBy = document.getElementById('sortBy').value;
+  localStorage.setItem('leads2_sortBy', sortBy);
+  syncSortControls();
+  renderLeads();
+}
+
+function toggleSortDir(){
+  sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  localStorage.setItem('leads2_sortDir', sortDir);
+  syncSortControls();
+  renderLeads();
+}
+
+function sortLeadList(list){
+  if(sortBy === 'manual'){
+    const pos = {};
+    leadOrder.forEach((id,i)=> pos[id] = i);
+    list.sort((a,b)=> (pos[a.id]==null?1e9:pos[a.id]) - (pos[b.id]==null?1e9:pos[b.id]));
+    return;
+  }
+  const dir = sortDir === 'asc' ? 1 : -1;
+  list.sort((a,b)=>{
+    let r = 0;
+    if(sortBy === 'name'){
+      r = String(a.name||'').localeCompare(String(b.name||''), 'he');
+    } else if(sortBy === 'date'){
+      r = String(a.lead_date || a.created_at || '').localeCompare(String(b.lead_date || b.created_at || ''));
+    } else if(sortBy === 'status'){
+      /* pipeline order, not alphabetical — a board reads better that way */
+      const ia = STATUSES.indexOf(a.status), ib = STATUSES.indexOf(b.status);
+      r = (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      if(r === 0) r = String(a.name||'').localeCompare(String(b.name||''), 'he');
+    }
+    return r * dir;
+  });
 }
 
 function renderLeads(){
@@ -700,9 +803,7 @@ function renderLeads(){
     }
     return true;
   });
-  const pos = {};
-  leadOrder.forEach((id,i)=> pos[id] = i);
-  list.sort((a,b)=> (pos[a.id]==null?1e9:pos[a.id]) - (pos[b.id]==null?1e9:pos[b.id]));
+  sortLeadList(list);
 
   if(!list.length){ grid.innerHTML = '<div class="empty">לא נמצאו לידים</div>'; return; }
   grid.innerHTML = list.map(l=>`
@@ -721,10 +822,15 @@ function renderLeads(){
   grid.querySelectorAll('.cube').forEach(c=>{
     c.onclick = ()=>{ if(Date.now() - lastDragEnd > 300) openModal(c.dataset.id); };
   });
-  enableDragSort(grid, '.cube', ids=>{
-    leadOrder = ids.concat(leadOrder.filter(i=> ids.indexOf(i) < 0));
-    saveLeadOrder();
-  });
+  /* Dragging while a sort is active would just snap back on the next render,
+     so it is only offered when the manual order is the one being shown. */
+  grid.dataset.dragBound = '';
+  if(sortBy === 'manual'){
+    enableDragSort(grid, '.cube', ids=>{
+      leadOrder = ids.concat(leadOrder.filter(i=> ids.indexOf(i) < 0));
+      saveLeadOrder();
+    });
+  }
 }
 
 function esc(s){ return s==null? '' : String(s).replace(/[<>&"']/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -734,7 +840,7 @@ const FIELDS = [
   {k:'mortgage', l:'סכום משכנתא'}, {k:'premium', l:'פרמיה חודשית'}, {k:'insurance_type', l:'סוג (חדש/ניוד)'},
   {k:'bank', l:'בנק המשכנתא'}, {k:'current_insurer', l:'מבטח נוכחי'},
   {k:'status', l:'סטטוס', type:'select', opts:STATUSES},
-  {k:'channels', l:'ערוצים (ישיר/ליברה)'}, {k:'referral_source', l:'מקור הפניה'},
+  {k:'channels', l:'ערוץ', type:'select', opts:CHANNELS}, {k:'referral_source', l:'מקור הפניה'},
   {k:'lead_date', l:'תאריך ליד', type:'date'}, {k:'close_date', l:'תאריך סגירה', type:'date'},
   {k:'paid_to_avi', l:'עמלה שהתקבלה'},
   {k:'commission_to_client', l:'עמלה/מתנה ללקוח'},
@@ -777,8 +883,11 @@ function renderModal(){
       return `<div class="${cls}"><label>${f.l}</label><div class="roVal">${esc(val)}</div></div>`;
     }
     if(f.type==='select'){
+      /* keep whatever is already stored even if it predates the option list,
+         so opening an old card cannot quietly rewrite its value on save */
+      const opts = f.opts.indexOf(val) === -1 && String(val).trim() ? f.opts.concat([val]) : f.opts;
       return `<div class="${cls}"><label>${f.l}</label><select data-k="${f.k}">
-        ${f.opts.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}
+        ${opts.map(o=>`<option value="${esc(o)}" ${o===val?'selected':''}>${esc(o)||'—'}</option>`).join('')}
       </select></div>`;
     }
     if(f.type==='textarea'){
@@ -1056,9 +1165,14 @@ function openClientFromTask(name){
 /* ---------- Payments ---------- */
 function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 
+/* Channels have been written several ways over time — "ישיר", "ישיר, ליברה",
+   and now "ליברה וישיר" — so match on substrings rather than exact tokens. */
 function channelOf(l){
-  const chs = (l.channels||'').split(',').map(s=>s.trim());
-  for(const c of ['ישיר','ליברה']) if(chs.includes(c)) return c;
+  const s = l.channels || '';
+  const libra = s.indexOf('ליברה') > -1, yashir = s.indexOf('ישיר') > -1;
+  if(libra && yashir) return 'ליברה וישיר';
+  if(libra) return 'ליברה';
+  if(yashir) return 'ישיר';
   return 'לא ידוע';
 }
 

@@ -183,7 +183,6 @@
           <option value="">כל הערוצים</option>
           <option value="ישיר">ישיר</option>
           <option value="ליברה">ליברה</option>
-          <option value="שוירץ">שוירץ</option>
         </select>
       </div>
       <div id="leadsGrid" class="grid"><div class="loading">טוען…</div></div>
@@ -191,10 +190,14 @@
 
     <section id="visitsTab" style="display:none">
       <div class="statRow" id="visitStats"></div>
+      <div class="toolbar">
+        <button class="iconBtn" onclick="deleteOldVisits()">🗑 מחיקת רשומות ישנות מ־30 יום</button>
+        <button class="iconBtn" onclick="deleteAllVisits()">🗑 מחיקת כל נתוני הכניסות</button>
+      </div>
       <div class="tableWrap">
         <table>
-          <thead><tr><th>תאריך ושעה</th><th>עמוד</th><th>מקור (referrer)</th><th>מכשיר</th><th>משך (שנ')</th><th>המרה</th></tr></thead>
-          <tbody id="visitsBody"><tr><td colspan="6" class="loading">טוען…</td></tr></tbody>
+          <thead><tr><th>תאריך ושעה</th><th>עמוד</th><th>מקור (referrer)</th><th>מכשיר</th><th>משך (שנ')</th><th>המרה</th><th></th></tr></thead>
+          <tbody id="visitsBody"><tr><td colspan="7" class="loading">טוען…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -233,18 +236,18 @@
         <select id="calcChannel" onchange="renderCalc()">
           <option value="ישיר">ישיר</option>
           <option value="ליברה">ליברה</option>
-          <option value="שוירץ">שוירץ</option>
         </select>
         <input type="number" id="calcValue" placeholder="סכום משכנתא / פרמיה חודשית" oninput="renderCalc()">
         <label><input type="checkbox" id="calcMivne" onchange="renderCalc()"> מבנה</label>
         <div class="calcResult" id="calcResult">-</div>
       </div>
-      <div class="calcNote">לשוירץ־מבנה: (ערך כינון באלפים) × 0.88 ÷ 12 = עמלה חודשית</div>
+      <div class="calcNote">ישיר — לפי סכום המשכנתא · ליברה — לפי הפרמיה החודשית</div>
 
       <h3>ספר הוצאות</h3>
       <div class="taskForm">
         <input type="date" id="expDate">
         <select id="expType">
+          <option value="מתנה ללקוח">מתנה ללקוח</option>
           <option value="פרסום">פרסום</option>
           <option value="תשלום למפנה">תשלום למפנה</option>
           <option value="אחר">אחר</option>
@@ -293,6 +296,7 @@
     <div class="modalGrid" id="modalGrid"></div>
     <div class="modalActions">
       <button class="btn btnDanger" id="delBtn" onclick="deleteLead()" style="display:none">מחיקה</button>
+      <button class="btn btnGhost" id="quickTaskBtn" onclick="quickTaskFromLead()" style="display:none">➕ משימה</button>
       <button class="btn btnGhost" id="draftLibraBtn" onclick="draftLibra()" style="display:none">✉ צור טיוטה לדניאל</button>
       <button class="btn btnGhost" id="yashirPdfBtn" onclick="yashirPdfAction()" style="display:none">📄 הפק PDF לישיר</button>
       <button class="btn btnGhost" onclick="closeModal()">ביטול</button>
@@ -319,7 +323,7 @@
 const SUPA_URL = "https://ktcabahjyjmtfavlsdks.supabase.co";
 const SUPA_KEY = "sb_publishable_jYj0az-JCWUc3ga1fRYcew_La1y7qVw";
 const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz5ZVsmDBGRvs56AjDZBUK3hTriVER2Q1H4841LdW7U11kyJv-AFzotFaPSrgA3qy8vGA/exec";
-const STATUSES = ["ליד חדש","ממתין לשליחת ליד","נשלח לליברה","נשלח לישיר","נשלח לשוירץ","נסגר בליברה","נסגר בישיר","נסגר בשוירץ"];
+const STATUSES = ["ליד חדש","ממתין לשליחת ליד","נשלח לליברה","נשלח לישיר","נסגר בליברה","נסגר בישיר","לא רלוונטי"];
 
 let session = null;
 let leads = [];
@@ -329,6 +333,7 @@ let expenses = [];
 let mail = [];
 let currentLead = null;
 let currentTask = null;
+let taskOrder = [];
 let visitsLoaded = false;
 let tasksLoaded = false;
 let paymentsLoaded = false;
@@ -448,9 +453,10 @@ async function loadLeads(){
 }
 
 function badgeClass(status){
-  if(status === 'נסגר') return 'closed';
-  if(status === 'ליד חדש') return 'new';
-  if(status === 'סירוב' || status === 'ביטול') return 'lost';
+  const s = status || '';
+  if(s.indexOf('נסגר') === 0) return 'closed';
+  if(s === 'ליד חדש') return 'new';
+  if(s === 'לא רלוונטי') return 'lost';
   return 'wait';
 }
 
@@ -490,11 +496,10 @@ const FIELDS = [
   {k:'mortgage', l:'סכום משכנתא'}, {k:'premium', l:'פרמיה חודשית'}, {k:'insurance_type', l:'סוג (חדש/ניוד)'},
   {k:'bank', l:'בנק המשכנתא'}, {k:'current_insurer', l:'מבטח נוכחי'},
   {k:'status', l:'סטטוס', type:'select', opts:STATUSES},
-  {k:'channels', l:'ערוצים (ישיר/ליברה/שוירץ)'}, {k:'referral_source', l:'מקור הפניה'},
+  {k:'channels', l:'ערוצים (ישיר/ליברה)'}, {k:'referral_source', l:'מקור הפניה'},
   {k:'lead_date', l:'תאריך ליד', type:'date'}, {k:'close_date', l:'תאריך סגירה', type:'date'},
-{k:'paid_to_avi', l:'עמלה שהתקבלה'},
-{k:'commission_to_client', l:'עמלה/מתנה ללקוח'},
-{k:'source', l:'מקור הליד'},
+  {k:'paid_to_avi', l:'עמלה שהתקבלה'},
+  {k:'commission_to_client', l:'עמלה/מתנה ללקוח'},
   {k:'source', l:'מקור הליד'},
   {k:'notes', l:'הערות', type:'textarea', full:true}
 ];
@@ -503,6 +508,7 @@ function openModal(id){
   currentLead = id ? leads.find(l=>l.id===id) : null;
   document.getElementById('modalTitle').textContent = currentLead ? 'עריכת ליד' : 'ליד חדש';
   document.getElementById('delBtn').style.display = currentLead ? 'inline-block' : 'none';
+  document.getElementById('quickTaskBtn').style.display = currentLead ? 'inline-block' : 'none';
   document.getElementById('draftLibraBtn').style.display = currentLead ? 'inline-block' : 'none';
   document.getElementById('yashirPdfBtn').style.display = currentLead ? 'inline-block' : 'none';
   const grid = document.getElementById('modalGrid');
@@ -548,9 +554,9 @@ async function deleteLead(){
 
 /* ---------- Visits ---------- */
 async function loadVisits(){
-  document.getElementById('visitsBody').innerHTML = '<tr><td colspan="6" class="loading">טוען…</td></tr>';
+  document.getElementById('visitsBody').innerHTML = '<tr><td colspan="7" class="loading">טוען…</td></tr>';
   const r = await authFetch('/rest/v1/visits?select=*&order=ts.desc&limit=500');
-  if(!r.ok){ document.getElementById('visitsBody').innerHTML = '<tr><td colspan="6" class="empty">שגיאה בטעינה</td></tr>'; return; }
+  if(!r.ok){ document.getElementById('visitsBody').innerHTML = '<tr><td colspan="7" class="empty">שגיאה בטעינה</td></tr>'; return; }
   visits = await r.json();
   renderVisits();
 }
@@ -569,30 +575,110 @@ function renderVisits(){
     <div class="stat"><div class="num">${topDevice? topDevice[0] : '-'}</div><div class="lbl">מכשיר מוביל</div></div>
   `;
   const body = document.getElementById('visitsBody');
-  if(!visits.length){ body.innerHTML = '<tr><td colspan="6" class="empty">אין נתוני מבקרים עדיין</td></tr>'; return; }
+  if(!visits.length){ body.innerHTML = '<tr><td colspan="7" class="empty">אין נתוני מבקרים עדיין</td></tr>'; return; }
   body.innerHTML = visits.map(v=>`
-    <tr>
+    <tr data-id="${v.id}">
       <td>${v.ts? new Date(v.ts).toLocaleString('he-IL') : ''}</td>
       <td>${esc(v.path)}</td>
       <td>${esc(v.referrer)||'ישיר'}</td>
       <td>${esc(v.device)}</td>
       <td>${v.duration!=null? v.duration : ''}</td>
       <td>${v.converted? '✅' : ''}</td>
+      <td><button class="iconBtn visitDelBtn" title="מחיקת רשומה">🗑️</button></td>
     </tr>
   `).join('');
+  document.querySelectorAll('#visitsBody .visitDelBtn').forEach(btn=>{
+    btn.onclick = ()=> deleteVisit(btn.closest('tr').dataset.id);
+  });
+}
+
+async function deleteVisit(id){
+  if(!confirm('למחוק את רשומת הכניסה?')) return;
+  const r = await authFetch('/rest/v1/visits?id=eq.'+id, {method:'DELETE'});
+  if(r.ok) loadVisits(); else showToast('שגיאה במחיקה', true);
+}
+
+async function deleteOldVisits(){
+  if(!confirm('למחוק את כל רשומות הכניסות מלפני יותר מ־30 יום?')) return;
+  const cutoff = new Date(Date.now() - 30*24*3600*1000).toISOString();
+  const r = await authFetch('/rest/v1/visits?ts=lt.'+encodeURIComponent(cutoff), {method:'DELETE'});
+  if(r.ok){ showToast('✅ הרשומות הישנות נמחקו'); loadVisits(); }
+  else showToast('שגיאה במחיקה', true);
+}
+
+async function deleteAllVisits(){
+  if(!confirm('למחוק את כל נתוני הכניסות לצמיתות? הפעולה אינה הפיכה.')) return;
+  if(!confirm('אישור אחרון — כל היסטוריית המבקרים תימחק. להמשיך?')) return;
+  const r = await authFetch('/rest/v1/visits?id=not.is.null', {method:'DELETE'});
+  if(r.ok){ showToast('✅ כל נתוני הכניסות נמחקו'); loadVisits(); }
+  else showToast('שגיאה במחיקה', true);
 }
 
 /* ---------- Tasks ---------- */
+/* Manual task order: stored in the shared `drafts` table (key `task_order`) so it
+   syncs across devices, with a localStorage fallback when the request fails. */
+function localTaskOrder(){
+  try{ return JSON.parse(localStorage.getItem('leads2_task_order')) || []; }catch(e){ return []; }
+}
+
+async function fetchTaskOrder(){
+  try{
+    const r = await authFetch('/rest/v1/drafts?key=eq.task_order&select=data');
+    if(r.ok){
+      const d = await r.json();
+      if(d.length && d[0].data && Array.isArray(d[0].data.ids)) return d[0].data.ids;
+    }
+  }catch(e){}
+  return localTaskOrder();
+}
+
+async function saveTaskOrder(){
+  localStorage.setItem('leads2_task_order', JSON.stringify(taskOrder));
+  try{
+    await authFetch('/rest/v1/drafts', {
+      method:'POST',
+      headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify({key:'task_order', data:{ids:taskOrder}, updated_at:new Date().toISOString()})
+    });
+  }catch(e){}
+}
+
+/* Newest tasks first; anything the user dragged keeps its place; done sinks to the bottom. */
+function applyTaskOrder(){
+  const byId = {};
+  tasks.forEach(t=> byId[t.id] = t);
+  const known = taskOrder.filter(id=> byId[id]);
+  const fresh = tasks.filter(t=> known.indexOf(t.id) === -1)
+    .sort((a,b)=> String(b.created_at||'').localeCompare(String(a.created_at||'')))
+    .map(t=> t.id);
+  taskOrder = fresh.concat(known);
+  const pos = {};
+  taskOrder.forEach((id,i)=> pos[id] = i);
+  tasks.sort((a,b)=>{
+    if(!!a.done !== !!b.done) return a.done ? 1 : -1;
+    return (pos[a.id]||0) - (pos[b.id]||0);
+  });
+}
+
+async function moveTask(id, dir){
+  const vis = tasks.map(t=> t.id);
+  const vi = vis.indexOf(id), vj = vi + dir;
+  if(vi < 0 || vj < 0 || vj >= vis.length) return;
+  const ia = taskOrder.indexOf(id), ib = taskOrder.indexOf(vis[vj]);
+  if(ia < 0 || ib < 0) return;
+  taskOrder[ia] = vis[vj]; taskOrder[ib] = id;
+  applyTaskOrder();
+  renderTasks();
+  saveTaskOrder();
+}
+
 async function loadTasks(){
   document.getElementById('tasksList').innerHTML = '<div class="loading">טוען…</div>';
   const r = await authFetch('/rest/v1/tasks?select=*&order=created_at.desc');
   if(!r.ok){ document.getElementById('tasksList').innerHTML = '<div class="empty">שגיאה בטעינה</div>'; return; }
   tasks = await r.json();
-  tasks.sort((a,b)=>{
-    if(!!a.done !== !!b.done) return a.done ? 1 : -1;
-    const ad = a.due_date || '9999-99-99', bd = b.due_date || '9999-99-99';
-    return ad.localeCompare(bd);
-  });
+  taskOrder = await fetchTaskOrder();
+  applyTaskOrder();
   renderTasks();
 }
 
@@ -604,10 +690,18 @@ function renderTasks(){
       <input type="checkbox" class="taskDone" ${t.done?'checked':''}>
       <div class="txt">${esc(t.text)}${t.due_date? ' <span class="due">· '+esc(t.due_date)+'</span>':''}</div>
       ${t.client_name? `<button class="clientTag" data-client="${esc(t.client_name)}">${esc(t.client_name)}</button>`:''}
+      <button class="iconBtn taskUpBtn" title="העלה למעלה">↑</button>
+      <button class="iconBtn taskDownBtn" title="הורד למטה">↓</button>
       <button class="iconBtn taskEditBtn">✏️</button>
       <button class="iconBtn taskDelBtnRow">🗑️</button>
     </div>
   `).join('');
+  document.querySelectorAll('#tasksList .taskUpBtn').forEach(btn=>{
+    btn.onclick = ()=> moveTask(btn.closest('.taskItem').dataset.id, -1);
+  });
+  document.querySelectorAll('#tasksList .taskDownBtn').forEach(btn=>{
+    btn.onclick = ()=> moveTask(btn.closest('.taskItem').dataset.id, 1);
+  });
   document.querySelectorAll('#tasksList .taskDone').forEach(cb=>{
     cb.onchange = ()=> toggleTask(cb.closest('.taskItem').dataset.id, cb.checked);
   });
@@ -677,6 +771,19 @@ async function deleteTask(){
   if(r.ok){ closeTaskModal(); loadTasks(); } else alert('שגיאה במחיקה');
 }
 
+/* Add a task straight from an open lead card, pre-tagged with that lead's name. */
+async function quickTaskFromLead(){
+  if(!currentLead) return;
+  const text = prompt('משימה חדשה עבור ' + (currentLead.name || 'הליד') + ':');
+  if(!text || !text.trim()) return;
+  const r = await authFetch('/rest/v1/tasks', {method:'POST', headers:{Prefer:'return=minimal'},
+    body: JSON.stringify({text: text.trim(), client_name: currentLead.name || null, done:false})});
+  if(r.ok){
+    showToast('✅ המשימה נוספה');
+    if(tasksLoaded) loadTasks();
+  } else showToast('שגיאה בהוספת המשימה', true);
+}
+
 function openClientFromTask(name){
   const lead = leads.find(l=> (l.name||'').trim() === (name||'').trim());
   if(!lead){ alert('לא נמצא ליד בשם זה ברשימת הלידים'); return; }
@@ -689,7 +796,7 @@ function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 
 function channelOf(l){
   const chs = (l.channels||'').split(',').map(s=>s.trim());
-  for(const c of ['ישיר','ליברה','שוירץ']) if(chs.includes(c)) return c;
+  for(const c of ['ישיר','ליברה']) if(chs.includes(c)) return c;
   return 'לא ידוע';
 }
 
@@ -751,8 +858,6 @@ function renderCalc(){
     if(mivne) result += 100;
   } else if(ch==='ליברה'){
     result = mivne ? 100 : (val>=20 ? 300 : (val>=15 ? 200 : 100));
-  } else if(ch==='שוירץ'){
-    result = val < 75 ? val*3 : val*4;
   }
   document.getElementById('calcResult').textContent = result ? Math.round(result).toLocaleString()+' ₪' : '-';
 }
@@ -818,9 +923,14 @@ function renderDocForm(){
   if(t==='receipt'){
     const fromOptions = ['ליברה חברה לביטוח בע"מ','איי.די.איי חברה לביטוח בע"מ ח.פ. 513910703','שוירץ'];
     wrap.innerHTML = `
-      <div class="full"><label>מאת (חברה) — ניתן לבחור מהרשימה או להקליד חופשי</label>
-        <input id="docFrom" type="text" list="docFromList" autocomplete="off">
-        <datalist id="docFromList">${fromOptions.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
+      <div class="full"><label>מאת (חברה)</label>
+        <select id="docFrom" onchange="toggleDocFromOther()">
+          ${fromOptions.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+          <option value="__other__">אחר (הקלדה חופשית)…</option>
+        </select>
+      </div>
+      <div class="full" id="docFromOtherWrap" style="display:none"><label>שם החברה / המשלם</label>
+        <input id="docFromOther" type="text" autocomplete="off" placeholder="הקלד שם חופשי">
       </div>
       <div><label>תאריך</label><input id="docDate" type="date" value="${today}"></div>
       <div><label>סכום</label><input id="docAmount" type="number"></div>
@@ -840,6 +950,25 @@ function renderDocForm(){
   }
 }
 
+function toggleDocFromOther(){
+  const sel = document.getElementById('docFrom');
+  const wrap = document.getElementById('docFromOtherWrap');
+  if(!sel || !wrap) return;
+  const other = sel.value === '__other__';
+  wrap.style.display = other ? 'block' : 'none';
+  if(other) document.getElementById('docFromOther').focus();
+}
+
+function docFromValue(){
+  const sel = document.getElementById('docFrom');
+  if(!sel) return '';
+  if(sel.value === '__other__'){
+    const inp = document.getElementById('docFromOther');
+    return inp ? inp.value.trim() : '';
+  }
+  return sel.value;
+}
+
 function addLibraRow(){
   const row = document.createElement('div');
   row.className = 'modalGrid libraRow';
@@ -857,7 +986,7 @@ function addLibraRow(){
 function generateDoc(){
   const t = document.getElementById('docType').value;
   if(t==='receipt'){
-    const from = esc(document.getElementById('docFrom').value);
+    const from = esc(docFromValue());
     const date = esc(document.getElementById('docDate').value);
     const amount = num(document.getElementById('docAmount').value).toLocaleString();
     const note = esc(document.getElementById('docNote').value);

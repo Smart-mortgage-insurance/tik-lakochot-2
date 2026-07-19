@@ -1203,6 +1203,42 @@ function showToast(msg, isErr){
    Downloads go through a short-lived signed URL, so nothing is public. */
 function bucket_(){ return document.getElementById('fileBucket').value; }
 
+/* Supabase Storage rejects non-ASCII object keys with InvalidKey, and percent
+   escapes are refused too — but base64url survives. So an ASCII-safe name is
+   stored verbatim (it stays readable in the Supabase dashboard) and anything
+   else is stored as enc__<base64url of the real name><ext>, decoded for display.
+   The extension is kept outside the blob so previews and downloads behave. */
+var KEY_MARK = 'enc__';
+var SAFE_KEY = /^[A-Za-z0-9 ._()\-]+$/;
+
+function b64urlEnc_(s){
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  bytes.forEach(b=> bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+function b64urlDec_(s){
+  let t = s.replace(/-/g,'+').replace(/_/g,'/');
+  while(t.length % 4) t += '=';
+  const bin = atob(t);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+function toKey_(name){
+  if(SAFE_KEY.test(name)) return name;
+  const ext = (name.match(/\.[^.]+$/)||[''])[0];
+  return KEY_MARK + b64urlEnc_(name) + ext;
+}
+
+function fromKey_(key){
+  if(key.indexOf(KEY_MARK) !== 0) return key;
+  const rest = key.slice(KEY_MARK.length).replace(/\.[^.]+$/, '');
+  try{ return b64urlDec_(rest); }catch(e){ return key; }
+}
+
 function humanSize_(b){
   if(b == null) return '';
   if(b < 1024) return b + ' B';
@@ -1229,7 +1265,7 @@ function renderFiles(){
     const size = f.metadata ? f.metadata.size : null;
     const when = f.created_at ? new Date(f.created_at).toLocaleDateString('he-IL') : '';
     return `<tr data-name="${esc(f.name)}">
-      <td>${esc(f.name)}</td>
+      <td>${esc(fromKey_(f.name))}</td>
       <td>${humanSize_(size)}</td>
       <td>${when}</td>
       <td>
@@ -1259,7 +1295,7 @@ async function uploadFile(){
   name = name.replace(/[\/\\]/g, '-');
 
   status.textContent = 'מעלה את ' + name + '…';
-  const r = await authFetch('/storage/v1/object/' + bucket_() + '/' + encodeURIComponent(name), {
+  const r = await authFetch('/storage/v1/object/' + bucket_() + '/' + encodeURIComponent(toKey_(name)), {
     method:'POST',
     headers:{'Content-Type': file.type || 'application/octet-stream', 'x-upsert':'true'},
     body: file
@@ -1289,7 +1325,7 @@ async function openFile(name){
 }
 
 async function deleteFile(name){
-  if(!confirm('למחוק את "' + name + '"?')) return;
+  if(!confirm('למחוק את "' + fromKey_(name) + '"?')) return;
   const r = await authFetch('/storage/v1/object/' + bucket_() + '/' + encodeURIComponent(name), {method:'DELETE'});
   if(r.ok){ showToast('✅ הקובץ נמחק'); loadFiles(); }
   else showToast('שגיאה במחיקה', true);

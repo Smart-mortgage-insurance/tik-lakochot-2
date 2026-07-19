@@ -1287,9 +1287,8 @@ async function deleteExpense(id){
 }
 
 /* ---------- Docs ---------- */
-function printDoc(title, bodyHtml){
-  const w = window.open('', '_blank');
-  w.document.write(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
+function buildDocHtml(title, bodyHtml){
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
     <style>
       body{font-family:Arial,sans-serif;padding:40px;color:#1b1f27}
       h1{font-size:1.3rem;border-bottom:2px solid #a9822f;padding-bottom:10px}
@@ -1297,10 +1296,50 @@ function printDoc(title, bodyHtml){
       th,td{border:1px solid #ccc;padding:8px 10px;text-align:right}
       .row{margin:6px 0}
       .label{color:#6b6456;font-size:.85rem}
-    </style></head><body>${bodyHtml}</body></html>`);
+    </style></head><body>${bodyHtml}</body></html>`;
+}
+
+/* Every document produced here is also filed under קבצים › טפסים, so there is a
+   record of what was sent without having to remember to save the print dialog. */
+function printDoc(title, bodyHtml, saveName){
+  const html = buildDocHtml(title, bodyHtml);
+  const w = window.open('', '_blank');
+  w.document.write(html);
   w.document.close();
   w.focus();
   setTimeout(()=>w.print(), 300);
+  if(saveName) saveDocToFiles(saveName, html);
+}
+
+/* Documents pile up, so the name has to say what it is at a glance and never
+   collide: kind, who or how much it was for, then the date and time. */
+function docFileName(kind, subject){
+  const now = new Date();
+  const stamp = now.toISOString().slice(0,10) + ' ' +
+    String(now.getHours()).padStart(2,'0') + '-' + String(now.getMinutes()).padStart(2,'0');
+  const who = String(subject||'').trim().replace(/[\/\\]/g,'-').slice(0,40);
+  return (who ? kind + ' - ' + who : kind) + ' - ' + stamp + '.html';
+}
+
+async function saveDocToFiles(name, html){
+  const safe = name.replace(/[\/\\]/g, '-');
+  const blob = new Blob([html], {type:'text/html'});
+  try{
+    const r = await authFetch('/storage/v1/object/forms/' + encodeURIComponent(toKey_(safe)), {
+      method:'POST',
+      headers:{'Content-Type':'text/html; charset=utf-8', 'x-upsert':'true'},
+      body: blob
+    });
+    if(r.ok){
+      showToast('✅ נשמר בקבצים › טפסים');
+      /* refresh the list only if the user is already looking at that folder */
+      if(filesLoaded && document.getElementById('fileBucket').value === 'forms') loadFiles();
+    } else {
+      showToast('המסמך הופק אך לא נשמר בקבצים', true);
+    }
+  }catch(e){
+    showToast('המסמך הופק אך לא נשמר בקבצים', true);
+  }
 }
 
 function renderDocForm(){
@@ -1473,7 +1512,7 @@ function generateDoc(){
       <div class="row">התקבל מאת: ${from}</div>
       <div class="row">סכום: ${amount} ₪</div>
       ${note? `<div class="row">הערה: ${note}</div>`:''}
-    `);
+    `, docFileName('קבלה', docFromValue()));
   } else if(t==='libra'){
     const date = new Date().toLocaleDateString('he-IL');
     const rows = Array.from(document.querySelectorAll('#libraRows .libraRow')).map(r=>({
@@ -1491,7 +1530,7 @@ function generateDoc(){
       <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.amount.toLocaleString()} ₪</td>${anyNote?`<td>${r.note}</td>`:''}</tr>`).join('')}</tbody>
       <tfoot><tr><td><b>סה"כ</b></td><td><b>${total.toLocaleString()} ₪</b></td>${anyNote?'<td></td>':''}</tr></tfoot>
       </table>
-    `);
+    `, docFileName('דרישת תשלום ליברה', total.toLocaleString() + ' ש"ח'));
   } else if(t==='yashir'){
     const name = esc(document.getElementById('docName').value);
     const mortgage = num(document.getElementById('docMortgage').value).toLocaleString();
@@ -1504,7 +1543,7 @@ function generateDoc(){
       ${phone? `<div class="row">טלפון: ${phone}</div>`:''}
       <div class="row">סכום משכנתא: ${mortgage} ₪</div>
       <div class="row label">תאריך: ${new Date().toLocaleDateString('he-IL')}</div>
-    `);
+    `, docFileName('ליד לישיר', name));
   }
 }
 

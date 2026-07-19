@@ -731,6 +731,33 @@ function openModal(id){
 }
 function closeModal(){ document.getElementById('overlay').classList.remove('show'); }
 
+/* Clicking the dimmed backdrop should dismiss the dialog, the way every other
+   app behaves — having to reach for "ביטול" every time is needless friction.
+   The press and the release must both land on the backdrop, so dragging a
+   selection from inside the dialog and letting go outside doesn't close it. */
+(function enableBackdropClose(){
+  let downOnBackdrop = null;
+  document.addEventListener('mousedown', e=>{
+    downOnBackdrop = e.target.classList && e.target.classList.contains('overlay') ? e.target : null;
+  });
+  document.addEventListener('click', e=>{
+    if(!downOnBackdrop || e.target !== downOnBackdrop) return;
+    const ov = downOnBackdrop;
+    downOnBackdrop = null;
+    if(ov.id === 'overlay') closeModal();
+    else if(ov.id === 'taskOverlay') closeTaskModal();
+    else ov.classList.remove('show');
+  });
+  document.addEventListener('keydown', e=>{
+    if(e.key !== 'Escape') return;
+    const open = document.querySelector('.overlay.show');
+    if(!open) return;
+    if(open.id === 'overlay') closeModal();
+    else if(open.id === 'taskOverlay') closeTaskModal();
+    else open.classList.remove('show');
+  });
+})();
+
 async function saveLead(){
   const obj = {};
   document.querySelectorAll('#modalGrid [data-k]').forEach(el=>{ obj[el.dataset.k] = el.value || null; });

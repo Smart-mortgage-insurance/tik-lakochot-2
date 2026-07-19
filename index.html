@@ -131,6 +131,9 @@
   .mailItem .snippet{color:var(--sub);font-size:.85rem}
   .unreadDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);margin-inline-end:6px}
 
+  /* read-only value in the lead card */
+  .roVal{padding:9px 11px;border-radius:9px;background:var(--chip);border:1px solid var(--line);font-size:.9rem;white-space:pre-wrap;word-break:break-word}
+
   /* ---------- Drag to reorder ---------- */
   .taskItem, .cube{touch-action:manipulation}
   body.dragActive{user-select:none;-webkit-user-select:none;cursor:grabbing}
@@ -324,10 +327,12 @@
     <div class="modalActions">
       <button class="btn btnDanger" id="delBtn" onclick="deleteLead()" style="display:none">מחיקה</button>
       <button class="btn btnGhost" id="quickTaskBtn" onclick="quickTaskFromLead()" style="display:none">➕ משימה</button>
+      <button class="btn btnGhost" id="toLibraFormBtn" onclick="addLeadToLibraForm()" style="display:none">🧾 לדרישת תשלום</button>
       <button class="btn btnGhost" id="draftLibraBtn" onclick="draftLibra()" style="display:none">✉ צור טיוטה לדניאל</button>
       <button class="btn btnGhost" id="yashirPdfBtn" onclick="yashirPdfAction()" style="display:none">📄 הפק PDF לישיר</button>
-      <button class="btn btnGhost" onclick="closeModal()">ביטול</button>
-      <button class="btn btnGold" onclick="saveLead()">שמירה</button>
+      <button class="btn btnGhost" onclick="closeModal()">סגירה</button>
+      <button class="btn btnGold" id="editBtn" onclick="enableModalEdit()" style="display:none">✏️ עריכה</button>
+      <button class="btn btnGold" id="saveBtn" onclick="saveLead()">שמירה</button>
     </div>
   </div>
 </div>
@@ -446,12 +451,40 @@ function beginDrag(){
   s.item.parentNode.insertBefore(s.spacer, s.item);
 
   moveDrag(s.x, s.y);
+  startDragScroll();
   if(navigator.vibrate) navigator.vibrate(15);
+}
+
+/* Holding the item near the top or bottom edge should scroll the page. Pointer
+   events stop firing once the finger stops moving, so the scrolling has to be
+   driven by a timer rather than by pointermove, and the drop position has to be
+   recomputed on every step because the list moves underneath the cursor. */
+let dragScrollTimer = null;
+let lastPointer = {x:0, y:0};
+
+function startDragScroll(){
+  if(dragScrollTimer) return;
+  dragScrollTimer = setInterval(()=>{
+    if(!dragState || !dragState.active) return;
+    const EDGE = 90, h = window.innerHeight, y = lastPointer.y;
+    let dy = 0;
+    if(y < EDGE) dy = -Math.ceil((EDGE - y) / 5);
+    else if(y > h - EDGE) dy = Math.ceil((y - (h - EDGE)) / 5);
+    if(!dy) return;
+    const before = window.scrollY;
+    window.scrollBy(0, dy);
+    if(window.scrollY !== before) moveDrag(lastPointer.x, lastPointer.y);
+  }, 16);
+}
+
+function stopDragScroll(){
+  if(dragScrollTimer){ clearInterval(dragScrollTimer); dragScrollTimer = null; }
 }
 
 function moveDrag(x, y){
   const s = dragState;
   if(!s || !s.active) return;
+  lastPointer.x = x; lastPointer.y = y;
   s.item.style.left = (x - s.offX) + 'px';
   s.item.style.top = (y - s.offY) + 'px';
 
@@ -477,11 +510,13 @@ function moveDrag(x, y){
 
 function cancelDrag(){
   if(dragState) clearTimeout(dragState.timer);
+  stopDragScroll();
   dragState = null;
 }
 
 function endDrag(){
   const s = dragState;
+  stopDragScroll();
   if(!s){ return; }
   clearTimeout(s.timer);
   if(!s.active){ dragState = null; return; }
@@ -706,17 +741,40 @@ const FIELDS = [
   {k:'notes', l:'הערות', type:'textarea', full:true}
 ];
 
+/* A card that is already in flight opens as a read-only summary — the common
+   action there is looking something up, not editing, and an editable form
+   invites accidental changes. A brand-new lead still opens ready to type. */
+let modalEditing = false;
+
 function openModal(id){
   currentLead = id ? leads.find(l=>l.id===id) : null;
-  document.getElementById('modalTitle').textContent = currentLead ? 'עריכת ליד' : 'ליד חדש';
+  modalEditing = !currentLead || (currentLead.status || 'ליד חדש') === 'ליד חדש';
+  renderModal();
+  document.getElementById('overlay').classList.add('show');
+}
+
+function renderModal(){
+  const isNew = !currentLead;
+  document.getElementById('modalTitle').textContent =
+    isNew ? 'ליד חדש' : (modalEditing ? 'עריכת ליד' : (currentLead.name || 'פרטי ליד'));
   document.getElementById('delBtn').style.display = currentLead ? 'inline-block' : 'none';
   document.getElementById('quickTaskBtn').style.display = currentLead ? 'inline-block' : 'none';
   document.getElementById('draftLibraBtn').style.display = currentLead ? 'inline-block' : 'none';
   document.getElementById('yashirPdfBtn').style.display = currentLead ? 'inline-block' : 'none';
+  document.getElementById('editBtn').style.display = (currentLead && !modalEditing) ? 'inline-block' : 'none';
+  document.getElementById('saveBtn').style.display = modalEditing ? 'inline-block' : 'none';
+  /* offer the closed lead straight to the Libra payment demand */
+  const closed = currentLead && (currentLead.status || '').indexOf('נסגר') === 0;
+  document.getElementById('toLibraFormBtn').style.display = closed ? 'inline-block' : 'none';
+
   const grid = document.getElementById('modalGrid');
   grid.innerHTML = FIELDS.map(f=>{
     const val = currentLead ? (currentLead[f.k]||'') : '';
     const cls = f.full ? 'full' : '';
+    if(!modalEditing){
+      if(!String(val).trim()) return '';
+      return `<div class="${cls}"><label>${f.l}</label><div class="roVal">${esc(val)}</div></div>`;
+    }
     if(f.type==='select'){
       return `<div class="${cls}"><label>${f.l}</label><select data-k="${f.k}">
         ${f.opts.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}
@@ -726,9 +784,10 @@ function openModal(id){
       return `<div class="${cls}"><label>${f.l}</label><textarea data-k="${f.k}">${esc(val)}</textarea></div>`;
     }
     return `<div class="${cls}"><label>${f.l}</label><input data-k="${f.k}" type="${f.type||'text'}" value="${esc(val)}"></div>`;
-  }).join('');
-  document.getElementById('overlay').classList.add('show');
+  }).join('') || '<div class="empty">אין פרטים להצגה</div>';
 }
+
+function enableModalEdit(){ modalEditing = true; renderModal(); }
 function closeModal(){ document.getElementById('overlay').classList.remove('show'); }
 
 /* Clicking the dimmed backdrop should dismiss the dialog, the way every other
@@ -1140,8 +1199,7 @@ function renderDocForm(){
     `;
   } else if(t==='libra'){
     wrap.innerHTML = `<div><label>תאריך</label><input id="docDate" type="date" value="${today}"></div>`;
-    document.getElementById('libraRows').innerHTML = '';
-    addLibraRow();
+    restoreLibraRows();
   } else if(t==='yashir'){
     wrap.innerHTML = `
       <div><label>שם הלקוח</label><input id="docName" type="text"></div>
@@ -1171,18 +1229,87 @@ function docFromValue(){
   return sel.value;
 }
 
-function addLibraRow(){
+/* The payment demand is built up over days as clients close, so the rows are a
+   persisted draft: they survive leaving the tab, reloading, and switching
+   device, and only ever disappear when the row is deleted on purpose. */
+function libraRowsData(){
+  return Array.from(document.querySelectorAll('#libraRows .libraRow')).map(r=>({
+    name: r.querySelector('.lrName').value,
+    desc: r.querySelector('.lrDesc').value,
+    amount: r.querySelector('.lrAmount').value
+  })).filter(r=> r.name || r.desc || r.amount);
+}
+
+let libraSaveTimer = null;
+function saveLibraRows(){
+  clearTimeout(libraSaveTimer);
+  libraSaveTimer = setTimeout(()=> saveOrder_('libra_form', 'leads2_libra_form', libraRowsData()), 400);
+}
+
+async function restoreLibraRows(){
+  const box = document.getElementById('libraRows');
+  box.innerHTML = '';
+  let rows = [];
+  try{
+    const r = await authFetch('/rest/v1/drafts?key=eq.libra_form&select=data');
+    if(r.ok){
+      const d = await r.json();
+      if(d.length && d[0].data && Array.isArray(d[0].data.ids)) rows = d[0].data.ids;
+    }
+  }catch(e){}
+  if(!rows.length){
+    try{ rows = JSON.parse(localStorage.getItem('leads2_libra_form')) || []; }catch(e){ rows = []; }
+  }
+  if(!rows.length) rows = [{name:'', desc:'', amount:''}];
+  rows.forEach(r=> addLibraRow(r, true));
+}
+
+function addLibraRow(data, skipSave){
+  data = data || {};
   const row = document.createElement('div');
   row.className = 'modalGrid libraRow';
   row.innerHTML = `
-    <div><label>שם</label><input class="lrName" type="text"></div>
-    <div><label>תיאור</label><input class="lrDesc" type="text"></div>
-    <div><label>סכום</label><input class="lrAmount" type="number"></div>
+    <div><label>שם</label><input class="lrName" type="text" value="${esc(data.name||'')}"></div>
+    <div><label>תיאור</label><input class="lrDesc" type="text" value="${esc(data.desc||'')}"></div>
+    <div><label>סכום</label><input class="lrAmount" type="number" value="${esc(data.amount||'')}"></div>
     <div style="display:flex;align-items:flex-end">
-      <button type="button" class="iconBtn" title="מחק שורה" onclick="this.closest('.libraRow').remove()">🗑 מחק שורה</button>
+      <button type="button" class="iconBtn lrDel" title="מחק שורה">🗑 מחק שורה</button>
     </div>
   `;
+  row.querySelectorAll('input').forEach(i=> i.addEventListener('input', saveLibraRows));
+  row.querySelector('.lrDel').onclick = ()=>{
+    if(!confirm('למחוק את השורה מדרישת התשלום?')) return;
+    row.remove();
+    saveLibraRows();
+  };
   document.getElementById('libraRows').appendChild(row);
+  if(!skipSave) saveLibraRows();
+  return row;
+}
+
+/* Send a closed lead straight into the payment demand from its card. */
+async function addLeadToLibraForm(){
+  if(!currentLead) return;
+  const amount = currentLead.paid_to_avi || '';
+  let rows = [];
+  try{
+    const r = await authFetch('/rest/v1/drafts?key=eq.libra_form&select=data');
+    if(r.ok){
+      const d = await r.json();
+      if(d.length && d[0].data && Array.isArray(d[0].data.ids)) rows = d[0].data.ids;
+    }
+  }catch(e){}
+  if(!rows.length){
+    try{ rows = JSON.parse(localStorage.getItem('leads2_libra_form')) || []; }catch(e){ rows = []; }
+  }
+  if(rows.some(r=> (r.name||'').trim() === (currentLead.name||'').trim())){
+    showToast('הלקוח כבר נמצא בדרישת התשלום', true);
+    return;
+  }
+  rows.push({name: currentLead.name || '', desc: currentLead.close_date ? ('נסגר ' + currentLead.close_date) : '', amount: String(amount)});
+  await saveOrder_('libra_form', 'leads2_libra_form', rows);
+  showToast('✅ נוסף לדרישת התשלום');
+  if(document.getElementById('docType').value === 'libra') restoreLibraRows();
 }
 
 function generateDoc(){

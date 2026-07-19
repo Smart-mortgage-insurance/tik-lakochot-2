@@ -131,6 +131,13 @@
   .mailItem .snippet{color:var(--sub);font-size:.85rem}
   .unreadDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);margin-inline-end:6px}
 
+  /* ---------- Drag to reorder ---------- */
+  .taskItem, .cube{touch-action:manipulation}
+  body.dragActive{user-select:none;-webkit-user-select:none;cursor:grabbing}
+  .dragging{box-shadow:0 14px 40px rgba(0,0,0,.28)!important;opacity:.95;transform:scale(1.03);transition:none!important;margin:0!important}
+  .dropSpacer{border:2px dashed var(--gold);border-radius:14px;background:var(--chip);opacity:.5;box-sizing:border-box}
+  .grid .dropSpacer{border-radius:16px}
+
   /* ---------- Toast ---------- */
   .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--line);color:var(--ink);padding:14px 20px;border-radius:12px;box-shadow:var(--shadow);font-size:.88rem;font-weight:600;opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .25s,transform .25s;z-index:100}
   .toast.show{opacity:1;transform:translateY(0)}
@@ -334,11 +341,141 @@ let mail = [];
 let currentLead = null;
 let currentTask = null;
 let taskOrder = [];
+let leadOrder = [];
+let lastDragEnd = 0;
 let visitsLoaded = false;
 let tasksLoaded = false;
 let paymentsLoaded = false;
 let docsLoaded = false;
 let mailLoaded = false;
+
+/* ---------- Drag to reorder (mouse + touch) ----------
+   Touch needs a short press-and-hold before the drag takes over, otherwise the
+   gesture is ambiguous with a normal page scroll. Once the hold fires nothing
+   has scrolled yet, so blocking touchmove from that point keeps the page still.
+   onDrop receives the new id order of the items currently on screen. */
+let dragState = null;
+
+document.addEventListener('touchmove', e=>{
+  if(dragState && dragState.active) e.preventDefault();
+}, {passive:false});
+
+function enableDragSort(container, itemSel, onDrop){
+  if(!container || container.dataset.dragBound === itemSel) return;
+  container.dataset.dragBound = itemSel;
+
+  container.addEventListener('pointerdown', e=>{
+    if(e.button === 1 || e.button === 2) return;
+    const item = e.target.closest(itemSel);
+    if(!item || !container.contains(item)) return;
+    /* let real controls keep working */
+    if(e.target.closest('button, input, select, textarea, a')) return;
+
+    dragState = {
+      container, itemSel, onDrop, item,
+      x: e.clientX, y: e.clientY,
+      active: false, moved: false, timer: null,
+      touch: e.pointerType === 'touch', pointerId: e.pointerId
+    };
+    if(dragState.touch){
+      dragState.timer = setTimeout(()=>{ if(dragState) beginDrag(); }, 250);
+    }
+  });
+
+  container.addEventListener('pointermove', e=>{
+    if(!dragState || dragState.container !== container) return;
+    const dx = e.clientX - dragState.x, dy = e.clientY - dragState.y;
+    if(!dragState.active){
+      if(Math.abs(dx) + Math.abs(dy) < 6) return;
+      /* moved before the hold elapsed: it's a scroll, not a drag */
+      if(dragState.touch){ cancelDrag(); return; }
+      beginDrag();
+    }
+    dragState.moved = true;
+    moveDrag(e.clientX, e.clientY);
+  });
+
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>{
+    container.addEventListener(ev, ()=> endDrag());
+  });
+}
+
+function beginDrag(){
+  const s = dragState;
+  if(!s || s.active) return;
+  clearTimeout(s.timer);
+  s.active = true;
+  const r = s.item.getBoundingClientRect();
+  s.offX = s.x - r.left;
+  s.offY = s.y - r.top;
+  s.w = r.width; s.h = r.height;
+  s.item.classList.add('dragging');
+  s.item.style.width = r.width + 'px';
+  s.item.style.height = r.height + 'px';
+  s.item.style.position = 'fixed';
+  s.item.style.zIndex = '200';
+  s.item.style.pointerEvents = 'none';
+  document.body.classList.add('dragActive');
+
+  s.spacer = document.createElement('div');
+  s.spacer.className = 'dropSpacer';
+  s.spacer.style.width = r.width + 'px';
+  s.spacer.style.height = r.height + 'px';
+  s.item.parentNode.insertBefore(s.spacer, s.item);
+
+  moveDrag(s.x, s.y);
+  if(navigator.vibrate) navigator.vibrate(15);
+}
+
+function moveDrag(x, y){
+  const s = dragState;
+  if(!s || !s.active) return;
+  s.item.style.left = (x - s.offX) + 'px';
+  s.item.style.top = (y - s.offY) + 'px';
+
+  const others = Array.from(s.container.querySelectorAll(s.itemSel))
+    .filter(el => el !== s.item);
+  let target = null, best = Infinity;
+  others.forEach(el=>{
+    const r = el.getBoundingClientRect();
+    const d = Math.hypot(x - (r.left + r.width/2), y - (r.top + r.height/2));
+    if(d < best){ best = d; target = el; }
+  });
+  if(!target) return;
+
+  const r = target.getBoundingClientRect();
+  /* a card grid compares horizontally, a stacked list vertically */
+  const grid = s.container.classList.contains('grid');
+  const after = grid
+    ? (x > r.left + r.width/2)
+    : (y > r.top + r.height/2);
+  const ref = after ? target.nextSibling : target;
+  if(ref !== s.spacer) s.container.insertBefore(s.spacer, ref);
+}
+
+function cancelDrag(){
+  if(dragState) clearTimeout(dragState.timer);
+  dragState = null;
+}
+
+function endDrag(){
+  const s = dragState;
+  if(!s){ return; }
+  clearTimeout(s.timer);
+  if(!s.active){ dragState = null; return; }
+
+  s.container.insertBefore(s.item, s.spacer);
+  s.spacer.remove();
+  s.item.classList.remove('dragging');
+  ['width','height','position','zIndex','pointerEvents','left','top'].forEach(p=> s.item.style[p] = '');
+  document.body.classList.remove('dragActive');
+
+  const ids = Array.from(s.container.querySelectorAll(s.itemSel)).map(el=> el.dataset.id);
+  const cb = s.onDrop;
+  const moved = s.moved;
+  dragState = null;
+  if(moved){ lastDragEnd = Date.now(); if(cb) cb(ids); }
+}
 
 /* ---------- Theme ---------- */
 function toggleTheme(){
@@ -444,11 +581,41 @@ function switchTab(t){
 }
 
 /* ---------- Leads ---------- */
+/* Same shared-order trick as the tasks list, under its own drafts key. */
+async function fetchOrder_(key, lsKey){
+  try{
+    const r = await authFetch('/rest/v1/drafts?key=eq.'+key+'&select=data');
+    if(r.ok){
+      const d = await r.json();
+      if(d.length && d[0].data && Array.isArray(d[0].data.ids)) return d[0].data.ids;
+    }
+  }catch(e){}
+  try{ return JSON.parse(localStorage.getItem(lsKey)) || []; }catch(e){ return []; }
+}
+
+async function saveOrder_(key, lsKey, ids){
+  localStorage.setItem(lsKey, JSON.stringify(ids));
+  try{
+    await authFetch('/rest/v1/drafts', {
+      method:'POST',
+      headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify({key:key, data:{ids:ids}, updated_at:new Date().toISOString()})
+    });
+  }catch(e){}
+}
+
+function saveLeadOrder(){ return saveOrder_('lead_order', 'leads2_lead_order', leadOrder); }
+
 async function loadLeads(){
   document.getElementById('leadsGrid').innerHTML = '<div class="loading">טוען…</div>';
   const r = await authFetch('/rest/v1/leads?select=*&order=created_at.desc');
   if(!r.ok){ document.getElementById('leadsGrid').innerHTML = '<div class="empty">שגיאה בטעינת לידים</div>'; return; }
   leads = await r.json();
+  leadOrder = await fetchOrder_('lead_order', 'leads2_lead_order');
+  /* leads added since the last drag go to the front, newest first */
+  const known = leadOrder.filter(id=> leads.some(l=> l.id === id));
+  const fresh = leads.filter(l=> known.indexOf(l.id) < 0).map(l=> l.id);
+  leadOrder = fresh.concat(known);
   renderLeads();
 }
 
@@ -474,9 +641,13 @@ function renderLeads(){
     }
     return true;
   });
+  const pos = {};
+  leadOrder.forEach((id,i)=> pos[id] = i);
+  list.sort((a,b)=> (pos[a.id]==null?1e9:pos[a.id]) - (pos[b.id]==null?1e9:pos[b.id]));
+
   if(!list.length){ grid.innerHTML = '<div class="empty">לא נמצאו לידים</div>'; return; }
   grid.innerHTML = list.map(l=>`
-    <div class="cube" onclick="openModal('${l.id}')">
+    <div class="cube" data-id="${l.id}">
       <div class="name">${esc(l.name)||'(ללא שם)'}</div>
       <div class="meta">
         ${l.phone? '📞 '+esc(l.phone):''}
@@ -487,6 +658,14 @@ function renderLeads(){
       <span class="badge ${badgeClass(l.status)}">${esc(l.status)||'ליד חדש'}</span>
     </div>
   `).join('');
+
+  grid.querySelectorAll('.cube').forEach(c=>{
+    c.onclick = ()=>{ if(Date.now() - lastDragEnd > 300) openModal(c.dataset.id); };
+  });
+  enableDragSort(grid, '.cube', ids=>{
+    leadOrder = ids.concat(leadOrder.filter(i=> ids.indexOf(i) < 0));
+    saveLeadOrder();
+  });
 }
 
 function esc(s){ return s==null? '' : String(s).replace(/[<>&"']/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -615,33 +794,7 @@ async function deleteAllVisits(){
 }
 
 /* ---------- Tasks ---------- */
-/* Manual task order: stored in the shared `drafts` table (key `task_order`) so it
-   syncs across devices, with a localStorage fallback when the request fails. */
-function localTaskOrder(){
-  try{ return JSON.parse(localStorage.getItem('leads2_task_order')) || []; }catch(e){ return []; }
-}
-
-async function fetchTaskOrder(){
-  try{
-    const r = await authFetch('/rest/v1/drafts?key=eq.task_order&select=data');
-    if(r.ok){
-      const d = await r.json();
-      if(d.length && d[0].data && Array.isArray(d[0].data.ids)) return d[0].data.ids;
-    }
-  }catch(e){}
-  return localTaskOrder();
-}
-
-async function saveTaskOrder(){
-  localStorage.setItem('leads2_task_order', JSON.stringify(taskOrder));
-  try{
-    await authFetch('/rest/v1/drafts', {
-      method:'POST',
-      headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
-      body: JSON.stringify({key:'task_order', data:{ids:taskOrder}, updated_at:new Date().toISOString()})
-    });
-  }catch(e){}
-}
+function saveTaskOrder(){ return saveOrder_('task_order', 'leads2_task_order', taskOrder); }
 
 /* Newest tasks first; anything the user dragged keeps its place; done sinks to the bottom. */
 function applyTaskOrder(){
@@ -660,24 +813,12 @@ function applyTaskOrder(){
   });
 }
 
-async function moveTask(id, dir){
-  const vis = tasks.map(t=> t.id);
-  const vi = vis.indexOf(id), vj = vi + dir;
-  if(vi < 0 || vj < 0 || vj >= vis.length) return;
-  const ia = taskOrder.indexOf(id), ib = taskOrder.indexOf(vis[vj]);
-  if(ia < 0 || ib < 0) return;
-  taskOrder[ia] = vis[vj]; taskOrder[ib] = id;
-  applyTaskOrder();
-  renderTasks();
-  saveTaskOrder();
-}
-
 async function loadTasks(){
   document.getElementById('tasksList').innerHTML = '<div class="loading">טוען…</div>';
   const r = await authFetch('/rest/v1/tasks?select=*&order=created_at.desc');
   if(!r.ok){ document.getElementById('tasksList').innerHTML = '<div class="empty">שגיאה בטעינה</div>'; return; }
   tasks = await r.json();
-  taskOrder = await fetchTaskOrder();
+  taskOrder = await fetchOrder_('task_order', 'leads2_task_order');
   applyTaskOrder();
   renderTasks();
 }
@@ -690,18 +831,11 @@ function renderTasks(){
       <input type="checkbox" class="taskDone" ${t.done?'checked':''}>
       <div class="txt">${esc(t.text)}${t.due_date? ' <span class="due">· '+esc(t.due_date)+'</span>':''}</div>
       ${t.client_name? `<button class="clientTag" data-client="${esc(t.client_name)}">${esc(t.client_name)}</button>`:''}
-      <button class="iconBtn taskUpBtn" title="העלה למעלה">↑</button>
-      <button class="iconBtn taskDownBtn" title="הורד למטה">↓</button>
       <button class="iconBtn taskEditBtn">✏️</button>
       <button class="iconBtn taskDelBtnRow">🗑️</button>
     </div>
   `).join('');
-  document.querySelectorAll('#tasksList .taskUpBtn').forEach(btn=>{
-    btn.onclick = ()=> moveTask(btn.closest('.taskItem').dataset.id, -1);
-  });
-  document.querySelectorAll('#tasksList .taskDownBtn').forEach(btn=>{
-    btn.onclick = ()=> moveTask(btn.closest('.taskItem').dataset.id, 1);
-  });
+  enableDragSort(list, '.taskItem', ids=>{ taskOrder = ids.concat(taskOrder.filter(i=>ids.indexOf(i)<0)); saveTaskOrder(); });
   document.querySelectorAll('#tasksList .taskDone').forEach(cb=>{
     cb.onchange = ()=> toggleTask(cb.closest('.taskItem').dataset.id, cb.checked);
   });

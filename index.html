@@ -1287,18 +1287,6 @@ async function deleteExpense(id){
 }
 
 /* ---------- Docs ---------- */
-/* One place for the business details that appear on outgoing documents.
-   address and bank are optional — leave them empty and those lines are omitted. */
-const SUPPLIER = {
-  name:    'אביחי מזוז',
-  entity:  'עוסק פטור',
-  taxId:   '204231658',
-  phone:   '054-8442552',
-  email:   'avi8442552@gmail.com',
-  address: '',
-  bank:    ''
-};
-
 function buildDocHtml(title, bodyHtml){
   return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
     <style>
@@ -1308,14 +1296,6 @@ function buildDocHtml(title, bodyHtml){
       th,td{border:1px solid #ccc;padding:8px 10px;text-align:right}
       .row{margin:6px 0}
       .label{color:#6b6456;font-size:.85rem}
-      .parties{display:flex;gap:40px;flex-wrap:wrap;margin:18px 0}
-      .party{flex:1;min-width:220px;border:1px solid #ddd;border-radius:6px;padding:12px 14px}
-      .party h3{margin:0 0 8px;font-size:.9rem;color:#a9822f}
-      .party div{font-size:.9rem;margin:3px 0}
-      .demand{background:#faf6ec;border-right:4px solid #a9822f;padding:12px 14px;margin:18px 0;font-size:.95rem}
-      .total{margin-top:14px;font-size:1.05rem;font-weight:bold}
-      .sign{margin-top:34px;font-size:.9rem}
-      .sign .line{margin-top:26px;border-top:1px solid #999;width:220px;padding-top:5px;color:#6b6456}
     </style></head><body>${bodyHtml}</body></html>`;
 }
 
@@ -1527,7 +1507,7 @@ function generateDoc(){
     const note = esc(document.getElementById('docNote').value);
     printDoc('קבלה', `
       <h1>קבלה</h1>
-      <div class="row"><b>${esc(SUPPLIER.name)} — ${esc(SUPPLIER.entity)} ${esc(SUPPLIER.taxId)}</b></div>
+      <div class="row"><b>אביחי מזוז — עוסק פטור A.M.F 204231658</b></div>
       <div class="row label">תאריך: ${date}</div>
       <div class="row">התקבל מאת: ${from}</div>
       <div class="row">סכום: ${amount} ₪</div>
@@ -1543,53 +1523,14 @@ function generateDoc(){
     const total = rows.reduce((s,r)=>s+r.amount,0);
     /* the note column only appears on the printed page if something is in it */
     const anyNote = rows.some(r=> r.note.trim());
-    /* Libra's finance department needs to see the supplier's registration
-       number, who the supplier is, and wording that plainly states the supplier
-       is demanding payment — a bare table was being rejected. */
-    const now = new Date();
-    const docNo = now.getFullYear() + '-' +
-      String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '-' +
-      String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
     printDoc('דרישת תשלום — ליברה', `
-      <h1>דרישת תשלום</h1>
-      <div class="row label">מסמך מס' ${docNo} · תאריך: ${date}</div>
-
-      <div class="parties">
-        <div class="party">
-          <h3>הספק (הדורש)</h3>
-          <div><b>${esc(SUPPLIER.name)}</b></div>
-          <div>${esc(SUPPLIER.entity)}</div>
-          <div>ח.פ. / מספר עוסק: <b>${esc(SUPPLIER.taxId)}</b></div>
-          ${SUPPLIER.address? `<div>${esc(SUPPLIER.address)}</div>`:''}
-          <div>טלפון: ${esc(SUPPLIER.phone)}</div>
-          <div>דוא"ל: ${esc(SUPPLIER.email)}</div>
-        </div>
-        <div class="party">
-          <h3>לכבוד (המשלם)</h3>
-          <div><b>ליברה חברה לביטוח בע"מ</b></div>
-          <div>מחלקת כספים</div>
-          <div>דוא"ל: danielp@lbr.co.il</div>
-        </div>
-      </div>
-
-      <div class="demand">
-        <b>הנדון: דרישת תשלום בגין שירותי הפניית לידים</b><br><br>
-        הריני, <b>${esc(SUPPLIER.name)}</b>, ח.פ. / מספר עוסק <b>${esc(SUPPLIER.taxId)}</b>,
-        לדרוש מחברת ליברה חברה לביטוח בע"מ תשלום בסך
-        <b>${total.toLocaleString()} ₪</b>
-        בגין ${rows.length} הלידים המפורטים להלן, אשר הועברו לחברתכם ונסגרו בהצלחה.
-        ${SUPPLIER.bank? `<br><br>נא להעביר את התשלום לחשבון: ${esc(SUPPLIER.bank)}`:''}
-      </div>
-
-      <table><thead><tr><th>#</th><th>שם הלקוח</th><th>סכום</th>${anyNote?'<th>הערה</th>':''}</tr></thead>
-      <tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.amount.toLocaleString()} ₪</td>${anyNote?`<td>${r.note}</td>`:''}</tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="2"><b>סה"כ לתשלום</b></td><td><b>${total.toLocaleString()} ₪</b></td>${anyNote?'<td></td>':''}</tr></tfoot>
+      <h1>דרישת תשלום — ליברה</h1>
+      <div class="row"><b>אביחי מזוז — ח.פ. 204231658</b></div>
+      <div class="row label">תאריך: ${date}</div>
+      <table><thead><tr><th>שם הלקוח</th><th>סכום</th>${anyNote?'<th>הערה</th>':''}</tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.amount.toLocaleString()} ₪</td>${anyNote?`<td>${r.note}</td>`:''}</tr>`).join('')}</tbody>
+      <tfoot><tr><td><b>סה"כ</b></td><td><b>${total.toLocaleString()} ₪</b></td>${anyNote?'<td></td>':''}</tr></tfoot>
       </table>
-
-      <div class="sign">
-        בכבוד רב,
-        <div class="line">${esc(SUPPLIER.name)} · ${esc(SUPPLIER.taxId)}</div>
-      </div>
     `, docFileName('דרישת תשלום ליברה', total.toLocaleString() + ' ש"ח'));
   } else if(t==='yashir'){
     const name = esc(document.getElementById('docName').value);

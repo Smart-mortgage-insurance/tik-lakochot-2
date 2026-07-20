@@ -1372,7 +1372,7 @@ function renderDocForm(){
   } else if(t==='yashir'){
     wrap.innerHTML = `
       <div><label>שם הלקוח</label><input id="docName" type="text"></div>
-      <div><label>סכום משכנתא</label><input id="docMortgage" type="number"></div>
+      <div><label>סכום משכנתא</label><input id="docMortgage" type="text" placeholder="850000 · או: 850,000 + 320,000"></div>
       <div><label>ת.ז. (אופציונלי)</label><input id="docIdn" type="text"></div>
       <div><label>טלפון (אופציונלי)</label><input id="docPhone" type="text"></div>
     `;
@@ -1534,7 +1534,14 @@ function generateDoc(){
     `, docFileName('דרישת תשלום ליברה', total.toLocaleString() + ' ש"ח'));
   } else if(t==='yashir'){
     const name = esc(document.getElementById('docName').value);
-    const mortgage = num(document.getElementById('docMortgage').value).toLocaleString();
+    /* Free text, so a client with two mortgages can be written out in full.
+       A plain number still gets thousands separators and a ₪ automatically;
+       anything else is printed exactly as typed. */
+    const mortgageRaw = document.getElementById('docMortgage').value.trim();
+    const plain = mortgageRaw.replace(/[,\s₪]/g, '');
+    const mortgage = /^\d+$/.test(plain)
+      ? Number(plain).toLocaleString() + ' ₪'
+      : esc(mortgageRaw);
     const idn = esc(document.getElementById('docIdn').value);
     const phone = esc(document.getElementById('docPhone').value);
     printDoc('ליד לישיר - '+name, `
@@ -1542,7 +1549,7 @@ function generateDoc(){
       <div class="row">שם הלקוח: ${name}</div>
       ${idn? `<div class="row">תעודת זהות: ${idn}</div>`:''}
       ${phone? `<div class="row">טלפון: ${phone}</div>`:''}
-      <div class="row">סכום משכנתא: ${mortgage} ₪</div>
+      <div class="row">סכום משכנתא: ${mortgage}</div>
       <div class="row label">תאריך: ${new Date().toLocaleDateString('he-IL')}</div>
     `, docFileName('ליד לישיר', name));
   }

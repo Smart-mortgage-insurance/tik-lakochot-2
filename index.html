@@ -1675,13 +1675,29 @@ async function uploadFile(){
 }
 
 /* Private buckets need a signed URL; 60s is plenty to hand off to the browser. */
+/* Supabase deliberately serves stored HTML as text/plain so a malicious upload
+   cannot execute on their domain. For our own generated documents that meant
+   the page showed raw markup, and because text/plain ignores the charset
+   declaration the Hebrew came out as mojibake. So fetch the object and hand it
+   to the browser locally with the right type, which fixes both at once. */
 async function openFile(name){
   const r = await authFetch('/storage/v1/object/sign/' + bucket_() + '/' + encodeURIComponent(name), {
     method:'POST', body: JSON.stringify({expiresIn:60})
   });
   if(!r.ok){ showToast('שגיאה בפתיחת הקובץ', true); return; }
   const d = await r.json();
-  window.open(SUPA_URL + '/storage/v1' + d.signedURL, '_blank');
+  try{
+    const resp = await fetch(SUPA_URL + '/storage/v1' + d.signedURL);
+    let blob = await resp.blob();
+    if(/\.html?$/i.test(fromKey_(name))){
+      blob = new Blob([await blob.text()], {type:'text/html;charset=utf-8'});
+    }
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(()=> URL.revokeObjectURL(url), 60000);
+  }catch(e){
+    showToast('שגיאה בפתיחת הקובץ', true);
+  }
 }
 
 /* The single-object DELETE route rejects the JSON content-type authFetch always

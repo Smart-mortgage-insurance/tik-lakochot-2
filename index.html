@@ -247,8 +247,8 @@
       </div>
       <div class="tableWrap">
         <table>
-          <thead><tr><th>תאריך ושעה</th><th>עמוד</th><th>מקור (referrer)</th><th>מכשיר</th><th>משך (שנ')</th><th>המרה</th><th></th></tr></thead>
-          <tbody id="visitsBody"><tr><td colspan="7" class="loading">טוען…</td></tr></tbody>
+          <thead><tr><th>תאריך ושעה</th><th>עמוד</th><th>עיר</th><th>מקור מודעה</th><th>referrer</th><th>מכשיר</th><th>גלילה</th><th>טופס</th><th>סיפורים</th><th>משך (שנ')</th><th>המרה</th><th></th></tr></thead>
+          <tbody id="visitsBody"><tr><td colspan="12" class="loading">טוען…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -964,18 +964,34 @@ async function deleteLead(){
 
 /* ---------- Visits ---------- */
 async function loadVisits(){
-  document.getElementById('visitsBody').innerHTML = '<tr><td colspan="7" class="loading">טוען…</td></tr>';
+  document.getElementById('visitsBody').innerHTML = '<tr><td colspan="12" class="loading">טוען…</td></tr>';
   const r = await authFetch('/rest/v1/visits?select=*&order=ts.desc&limit=500');
-  if(!r.ok){ document.getElementById('visitsBody').innerHTML = '<tr><td colspan="7" class="empty">שגיאה בטעינה</td></tr>'; return; }
+  if(!r.ok){ document.getElementById('visitsBody').innerHTML = '<tr><td colspan="12" class="empty">שגיאה בטעינה</td></tr>'; return; }
   visits = await r.json();
   renderVisits();
+}
+
+/* '/' is the new landing page, '/my-site/' the old one */
+function pageLabel(p){
+  if(!p) return '';
+  if(p === '/' || p === '/index.html') return 'אתר חדש';
+  if(/my-site/.test(p)) return 'אתר ישן';
+  return esc(p);
+}
+function topOf(counts){
+  const e = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  return e ? e[0] : '-';
 }
 
 function renderVisits(){
   const total = visits.length;
   const converted = visits.filter(v=>v.converted).length;
-  const devices = {};
-  visits.forEach(v=>{ const d=v.device||'לא ידוע'; devices[d]=(devices[d]||0)+1; });
+  const devices = {}, cities = {}, sources = {};
+  visits.forEach(v=>{
+    devices[v.device||'לא ידוע'] = (devices[v.device||'לא ידוע']||0)+1;
+    if(v.city) cities[v.city] = (cities[v.city]||0)+1;
+    if(v.utm_source) sources[v.utm_source] = (sources[v.utm_source]||0)+1;
+  });
   const topDevice = Object.entries(devices).sort((a,b)=>b[1]-a[1])[0];
   const rate = total? Math.round(converted/total*100) : 0;
   document.getElementById('visitStats').innerHTML = `
@@ -983,20 +999,30 @@ function renderVisits(){
     <div class="stat"><div class="num">${converted}</div><div class="lbl">הפכו לפנייה</div></div>
     <div class="stat"><div class="num">${rate}%</div><div class="lbl">אחוז המרה</div></div>
     <div class="stat"><div class="num">${topDevice? topDevice[0] : '-'}</div><div class="lbl">מכשיר מוביל</div></div>
+    <div class="stat"><div class="num">${esc(topOf(cities))}</div><div class="lbl">עיר מובילה</div></div>
+    <div class="stat"><div class="num">${esc(topOf(sources))}</div><div class="lbl">מקור מוביל</div></div>
   `;
   const body = document.getElementById('visitsBody');
-  if(!visits.length){ body.innerHTML = '<tr><td colspan="7" class="empty">אין נתוני מבקרים עדיין</td></tr>'; return; }
-  body.innerHTML = visits.map(v=>`
+  if(!visits.length){ body.innerHTML = '<tr><td colspan="12" class="empty">אין נתוני מבקרים עדיין</td></tr>'; return; }
+  body.innerHTML = visits.map(v=>{
+    const city = v.city ? esc(v.city) + (v.region ? ' <span style="opacity:.6">('+esc(v.region)+')</span>' : '') : '';
+    const source = v.utm_source ? esc(v.utm_source) + (v.utm_medium ? ' / '+esc(v.utm_medium) : '') : '';
+    return `
     <tr data-id="${v.id}">
       <td>${v.ts? new Date(v.ts).toLocaleString('he-IL') : ''}</td>
-      <td>${esc(v.path)}</td>
+      <td>${pageLabel(v.path)}</td>
+      <td>${city}</td>
+      <td>${source}</td>
       <td>${esc(v.referrer)||'ישיר'}</td>
       <td>${esc(v.device)}</td>
+      <td>${v.scroll_depth!=null? v.scroll_depth+'%' : ''}</td>
+      <td>${v.reached_form? '✅' : ''}</td>
+      <td>${v.viewed_testimonials? '✅' : ''}</td>
       <td>${v.duration!=null? v.duration : ''}</td>
       <td>${v.converted? '✅' : ''}</td>
       <td><button class="iconBtn visitDelBtn" title="מחיקת רשומה">🗑️</button></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
   document.querySelectorAll('#visitsBody .visitDelBtn').forEach(btn=>{
     btn.onclick = ()=> deleteVisit(btn.closest('tr').dataset.id);
   });

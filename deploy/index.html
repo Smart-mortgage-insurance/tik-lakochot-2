@@ -1985,9 +1985,35 @@ async function draftLibra(){
   await callLeadAction('draftLibra', currentLead, document.getElementById('draftLibraBtn'), 'שולח…', '✅ טיוטה נוצרה ב-Gmail');
 }
 
-async function yashirPdfAction(){
+/* Yeshir PDF straight from the client card — a real printable document, not a
+   Gmail draft. Same shape as the "ליד לישיר" doc button: name + mortgage, with
+   the wording driven by new-vs-conversion, matching how the lead is written to
+   the Libra rep. */
+function yashirPdfAction(){
   if(!currentLead) return;
-  await callLeadAction('yashirPdf', currentLead, document.getElementById('yashirPdfBtn'), 'מייצר…', '✅ PDF נוצר וטיוטה נשלחה');
+  const l = currentLead;
+  const name  = esc(l.name || '');
+  const idn   = esc(l.id_number || '');
+  const phone = esc(l.phone || '');
+  const mortNum = num(l.mortgage);
+  const mort = mortNum ? mortNum.toLocaleString() + ' ₪' : esc(String(l.mortgage || '').trim());
+  const isConversion = (l.insurance_type || '').indexOf('ניוד') > -1;
+  let insLines;
+  if(isConversion){
+    const ins = esc((l.current_insurer || '').trim());
+    insLines = `<div class="row">ייתרת משכנתא ${mort}</div>`
+             + `<div class="row">${ins ? 'הסבה מ' + ins : 'הסבה'}</div>`;
+  } else {
+    insLines = `<div class="row">משכנתא חדשה על סך ${mort}</div>`;
+  }
+  printDoc('ליד לישיר - ' + name, `
+    <h1>טופס ליד — ביטוח ישיר</h1>
+    <div class="row">שם הלקוח: ${name}</div>
+    ${idn? `<div class="row">תעודת זהות: ${idn}</div>`:''}
+    ${phone? `<div class="row">טלפון: ${phone}</div>`:''}
+    ${insLines}
+    <div class="row label">תאריך: ${new Date().toLocaleDateString('he-IL')}</div>
+  `, docFileName('ליד לישיר', name));
 }
 
 /* ---------- Boot ---------- */

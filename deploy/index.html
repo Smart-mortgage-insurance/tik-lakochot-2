@@ -247,8 +247,8 @@
       </div>
       <div class="tableWrap">
         <table>
-          <thead><tr><th>תאריך ושעה</th><th>עמוד</th><th>מקור (referrer)</th><th>מכשיר</th><th>משך (שנ')</th><th>המרה</th><th></th></tr></thead>
-          <tbody id="visitsBody"><tr><td colspan="7" class="loading">טוען…</td></tr></tbody>
+          <thead><tr><th>תאריך ושעה</th><th>עמוד</th><th>עיר</th><th>מקור מודעה</th><th>referrer</th><th>מכשיר</th><th>גלילה</th><th>טופס</th><th>סיפורים</th><th>משך (שנ')</th><th>המרה</th><th></th></tr></thead>
+          <tbody id="visitsBody"><tr><td colspan="12" class="loading">טוען…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -964,18 +964,34 @@ async function deleteLead(){
 
 /* ---------- Visits ---------- */
 async function loadVisits(){
-  document.getElementById('visitsBody').innerHTML = '<tr><td colspan="7" class="loading">טוען…</td></tr>';
+  document.getElementById('visitsBody').innerHTML = '<tr><td colspan="12" class="loading">טוען…</td></tr>';
   const r = await authFetch('/rest/v1/visits?select=*&order=ts.desc&limit=500');
-  if(!r.ok){ document.getElementById('visitsBody').innerHTML = '<tr><td colspan="7" class="empty">שגיאה בטעינה</td></tr>'; return; }
+  if(!r.ok){ document.getElementById('visitsBody').innerHTML = '<tr><td colspan="12" class="empty">שגיאה בטעינה</td></tr>'; return; }
   visits = await r.json();
   renderVisits();
+}
+
+/* '/' is the new landing page, '/my-site/' the old one */
+function pageLabel(p){
+  if(!p) return '';
+  if(p === '/' || p === '/index.html') return 'אתר חדש';
+  if(/my-site/.test(p)) return 'אתר ישן';
+  return esc(p);
+}
+function topOf(counts){
+  const e = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  return e ? e[0] : '-';
 }
 
 function renderVisits(){
   const total = visits.length;
   const converted = visits.filter(v=>v.converted).length;
-  const devices = {};
-  visits.forEach(v=>{ const d=v.device||'לא ידוע'; devices[d]=(devices[d]||0)+1; });
+  const devices = {}, cities = {}, sources = {};
+  visits.forEach(v=>{
+    devices[v.device||'לא ידוע'] = (devices[v.device||'לא ידוע']||0)+1;
+    if(v.city) cities[v.city] = (cities[v.city]||0)+1;
+    if(v.utm_source) sources[v.utm_source] = (sources[v.utm_source]||0)+1;
+  });
   const topDevice = Object.entries(devices).sort((a,b)=>b[1]-a[1])[0];
   const rate = total? Math.round(converted/total*100) : 0;
   document.getElementById('visitStats').innerHTML = `
@@ -983,20 +999,30 @@ function renderVisits(){
     <div class="stat"><div class="num">${converted}</div><div class="lbl">הפכו לפנייה</div></div>
     <div class="stat"><div class="num">${rate}%</div><div class="lbl">אחוז המרה</div></div>
     <div class="stat"><div class="num">${topDevice? topDevice[0] : '-'}</div><div class="lbl">מכשיר מוביל</div></div>
+    <div class="stat"><div class="num">${esc(topOf(cities))}</div><div class="lbl">עיר מובילה</div></div>
+    <div class="stat"><div class="num">${esc(topOf(sources))}</div><div class="lbl">מקור מוביל</div></div>
   `;
   const body = document.getElementById('visitsBody');
-  if(!visits.length){ body.innerHTML = '<tr><td colspan="7" class="empty">אין נתוני מבקרים עדיין</td></tr>'; return; }
-  body.innerHTML = visits.map(v=>`
+  if(!visits.length){ body.innerHTML = '<tr><td colspan="12" class="empty">אין נתוני מבקרים עדיין</td></tr>'; return; }
+  body.innerHTML = visits.map(v=>{
+    const city = v.city ? esc(v.city) + (v.region ? ' <span style="opacity:.6">('+esc(v.region)+')</span>' : '') : '';
+    const source = v.utm_source ? esc(v.utm_source) + (v.utm_medium ? ' / '+esc(v.utm_medium) : '') : '';
+    return `
     <tr data-id="${v.id}">
       <td>${v.ts? new Date(v.ts).toLocaleString('he-IL') : ''}</td>
-      <td>${esc(v.path)}</td>
+      <td>${pageLabel(v.path)}</td>
+      <td>${city}</td>
+      <td>${source}</td>
       <td>${esc(v.referrer)||'ישיר'}</td>
       <td>${esc(v.device)}</td>
+      <td>${v.scroll_depth!=null? v.scroll_depth+'%' : ''}</td>
+      <td>${v.reached_form? '✅' : ''}</td>
+      <td>${v.viewed_testimonials? '✅' : ''}</td>
       <td>${v.duration!=null? v.duration : ''}</td>
       <td>${v.converted? '✅' : ''}</td>
       <td><button class="iconBtn visitDelBtn" title="מחיקת רשומה">🗑️</button></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
   document.querySelectorAll('#visitsBody .visitDelBtn').forEach(btn=>{
     btn.onclick = ()=> deleteVisit(btn.closest('tr').dataset.id);
   });
@@ -1287,22 +1313,97 @@ async function deleteExpense(id){
 }
 
 /* ---------- Docs ---------- */
-function buildDocHtml(title, bodyHtml){
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
-    <style>
+
+/* The receipt (קבלה) and the payment demand (חשבון עסקה) are made to look byte-for-byte
+   like the documents ypay.co.il / TCPDF produces, so what Avi sends is identical to
+   what he used to generate by hand. Shared building blocks below. */
+
+/* Blue "electronically signed" wax seal that sits at the top of the receipt. */
+const YPAY_SEAL = `<svg width="86" height="86" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="ysg" cx="50%" cy="34%" r="72%"><stop offset="0%" stop-color="#8ad8e2"/><stop offset="45%" stop-color="#33a9bf"/><stop offset="100%" stop-color="#19788b"/></radialGradient></defs><polygon points="50.0,3.0 56.9,10.6 66.1,5.8 70.0,15.4 80.2,14.0 80.6,24.3 90.7,26.5 87.6,36.3 96.3,41.8 90.0,50.0 96.3,58.2 87.6,63.7 90.7,73.5 80.6,75.7 80.2,86.0 70.0,84.6 66.1,94.2 56.9,89.4 50.0,97.0 43.1,89.4 33.9,94.2 30.0,84.6 19.8,86.0 19.4,75.7 9.3,73.5 12.4,63.7 3.7,58.2 10.0,50.0 3.7,41.8 12.4,36.3 9.3,26.5 19.4,24.3 19.8,14.0 30.0,15.4 33.9,5.8 43.1,10.6" fill="#19788b"/><circle cx="50" cy="50" r="37" fill="url(#ysg)"/><circle cx="50" cy="50" r="33" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.3"/><circle cx="50" cy="27" r="9.5" fill="#fff"/><path d="M45.6 27.2 l3 3.1 l6-6.4" fill="none" stroke="#19788b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><text x="50" y="52" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold" font-family="Arial">חתום</text><text x="50" y="66" text-anchor="middle" fill="#fff" font-size="8.5" font-weight="bold" font-family="Arial">אלקטרונית</text></svg>`;
+
+function ypayMoney(n){ return `<span class="amt">₪ ${Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`; }
+function ypayDate(iso){ return iso ? iso.split('-').reverse().join('/') : ''; }
+
+/* Running number per document kind, stored locally so Avi keeps full control:
+   the field is prefilled with the next number but he can type anything, and
+   after a document is produced the stored value bumps to entered+1. */
+function nextDocNum(kind){ return localStorage.getItem('leads2_docnum_'+kind) || ''; }
+function bumpDocNum(kind, used){
+  const n = parseInt(used,10);
+  if(!isNaN(n)) localStorage.setItem('leads2_docnum_'+kind, String(n+1));
+}
+
+function ypayCss(){ return `
+  @page{margin:0}
+  *{box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:44px 54px 96px;font-size:13px;line-height:1.55;direction:rtl}
+  .yp-head{display:flex;justify-content:space-between;align-items:flex-start}
+  .yp-seal{text-align:center;padding-top:2px}
+  .yp-seal .cap{font-weight:bold;font-size:12px;margin-top:5px}
+  .yp-title{font-size:30px;font-weight:bold;text-align:right;margin:0}
+  .yp-issued{text-align:right;margin:5px 0 0}
+  .yp-hr{border:0;border-top:1px solid #dcdcdc;margin:20px 0 24px}
+  .yp-meta{display:flex;justify-content:flex-start;gap:70px;text-align:right;margin-bottom:6px}
+  .yp-grid{display:grid;grid-template-columns:auto auto;column-gap:16px;row-gap:12px;align-content:start}
+  .yp-grid .lbl{font-weight:bold;text-align:right;white-space:nowrap}
+  .yp-grid .val{text-align:right}
+  .yp-for .val{max-width:220px}
+  .link{color:#0f9d8f;text-decoration:underline}
+  table.yp{width:100%;border-collapse:collapse;margin-top:28px;table-layout:fixed}
+  table.yp th{font-weight:bold;text-align:right;padding:9px 6px;border-bottom:1.5px solid #333;white-space:nowrap}
+  table.yp td{text-align:right;padding:12px 6px;border-bottom:1px solid #ececec;overflow:visible;word-break:break-word}
+  table.yp th.c,table.yp td.c{text-align:center}
+  .sumlabel{text-align:right;white-space:nowrap}
+  tr.bold td{font-weight:bold}
+  tr.shade td{background:#f5f5f5;font-weight:bold}
+  .amt{direction:ltr;unicode-bidi:isolate;display:inline-block;white-space:nowrap}
+  .yp-sig-r{margin-top:66px;text-align:right}
+  .yp-sig-l{position:fixed;left:54px;bottom:48px;text-align:left;font-size:13px}
+  .yp-sig-l .ln{display:inline-block;border-top:1px solid #333;width:120px;margin:0 6px;vertical-align:middle}
+  .yp-foot{position:fixed;left:0;right:0;bottom:14px;text-align:center;color:#8a8a8a;font-size:10px;line-height:1.8}
+  .yp-foot .link{color:#0f9d8f}
+`; }
+
+function ypayHead(titleText, dateStr, withSeal){
+  return `<div class="yp-head">
+    <div><div class="yp-title">${titleText}</div><div class="yp-issued"><b>הופק ב:</b> ${dateStr}</div></div>
+    ${withSeal ? `<div class="yp-seal">${YPAY_SEAL}<div class="cap">מסמך ממוחשב</div></div>` : '<div></div>'}
+  </div>`;
+}
+
+/* מאת/ע.פ/טלפון/אימייל in a right column, עבור to its left — matches both PDFs. */
+function ypayMeta(companyHtml, sender){ return `<div class="yp-meta">
+  <div class="yp-grid">
+    <div class="lbl">מאת:</div><div class="val"><b>${sender}</b></div>
+    <div class="lbl">ע.פ:</div><div class="val">204231658</div>
+    <div class="lbl">טלפון:</div><div class="val link">0548442552</div>
+    <div class="lbl">אימייל:</div><div class="val link">avi8442552@gmail.com</div>
+  </div>
+  <div class="yp-grid yp-for">
+    <div class="lbl">עבור:</div><div class="val">${companyHtml}</div>
+  </div>
+</div>`; }
+
+function ypayFoot(withTcpdf){
+  return `<div class="yp-foot">${withTcpdf ? 'Powered by TCPDF (www.tcpdf.org)<br>' : ''}דף 1 מתוך 1&nbsp;&nbsp;&nbsp;הופק באמצעות <span class="link">ypay.co.il</span> - הנהלת חשבונות חינם באינטרנט</div>`;
+}
+
+function buildDocHtml(title, bodyHtml, customCss){
+  const style = customCss || `
       body{font-family:Arial,sans-serif;padding:40px;color:#1b1f27}
       h1{font-size:1.3rem;border-bottom:2px solid #a9822f;padding-bottom:10px}
       table{width:100%;border-collapse:collapse;margin-top:16px}
       th,td{border:1px solid #ccc;padding:8px 10px;text-align:right}
       .row{margin:6px 0}
-      .label{color:#6b6456;font-size:.85rem}
-    </style></head><body>${bodyHtml}</body></html>`;
+      .label{color:#6b6456;font-size:.85rem}`;
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
+    <style>${style}</style></head><body>${bodyHtml}</body></html>`;
 }
 
 /* Every document produced here is also filed under קבצים › טפסים, so there is a
    record of what was sent without having to remember to save the print dialog. */
-function printDoc(title, bodyHtml, saveName){
-  const html = buildDocHtml(title, bodyHtml);
+function printDoc(title, bodyHtml, saveName, customCss){
+  const html = buildDocHtml(title, bodyHtml, customCss);
   const w = window.open('', '_blank');
   w.document.write(html);
   w.document.close();
@@ -1350,7 +1451,10 @@ function renderDocForm(){
   const today = new Date().toISOString().slice(0,10);
   if(t==='receipt'){
     const fromOptions = ['ליברה חברה לביטוח בע"מ','איי.די.איי חברה לביטוח בע"מ ח.פ. 513910703','שוירץ'];
+    const methods = ['העברה בנקאית','מזומן','המחאה','כרטיס אשראי','ביט / פייבוקס'];
     wrap.innerHTML = `
+      <div><label>מספר קבלה (מספור)</label><input id="docNum" type="number" value="${esc(nextDocNum('receipt'))}" placeholder="לדוגמה 12"></div>
+      <div><label>תאריך</label><input id="docDate" type="date" value="${today}"></div>
       <div class="full"><label>מאת (חברה)</label>
         <select id="docFrom" onchange="toggleDocFromOther()">
           ${fromOptions.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('')}
@@ -1360,14 +1464,17 @@ function renderDocForm(){
       <div class="full" id="docFromOtherWrap" style="display:none"><label>שם החברה / המשלם</label>
         <input id="docFromOther" type="text" autocomplete="off" placeholder="הקלד שם חופשי">
       </div>
-      <div><label>תאריך</label><input id="docDate" type="date" value="${today}"></div>
-      <div><label>סכום</label><input id="docAmount" type="number"></div>
-      <div class="full"><label>הערה</label><textarea id="docNote"></textarea></div>
+      <div><label>אמצעי תשלום</label>
+        <input id="docMethod" type="text" list="docMethodList" value="העברה בנקאית" autocomplete="off">
+        <datalist id="docMethodList">${methods.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
+      </div>
+      <div><label>סכום (₪)</label><input id="docAmount" type="number"></div>
+      <div class="full"><label>פרטים (אופציונלי)</label><input id="docNote" type="text" placeholder="יופיע בעמודת פרטים"></div>
     `;
   } else if(t==='libra'){
-    /* name and amount are the only things Daniel needs; the document carries
-       today's date on its own so there is nothing to fill in here */
-    wrap.innerHTML = '';
+    /* Client rows are a persisted draft (restoreLibraRows); the only field here
+       is the running document number, which Avi controls. */
+    wrap.innerHTML = `<div><label>מספר חשבון עסקה (מספור)</label><input id="docNum" type="number" value="${esc(nextDocNum('libra'))}" placeholder="לדוגמה 14"></div>`;
     restoreLibraRows();
   } else if(t==='yashir'){
     wrap.innerHTML = `
@@ -1501,37 +1608,74 @@ async function addLeadToLibraForm(){
 function generateDoc(){
   const t = document.getElementById('docType').value;
   if(t==='receipt'){
-    const from = esc(docFromValue());
-    const date = esc(document.getElementById('docDate').value);
-    const amount = num(document.getElementById('docAmount').value).toLocaleString();
-    const note = esc(document.getElementById('docNote').value);
-    printDoc('קבלה', `
-      <h1>קבלה</h1>
-      <div class="row"><b>אביחי מזוז — עוסק פטור A.M.F 204231658</b></div>
-      <div class="row label">תאריך: ${date}</div>
-      <div class="row">התקבל מאת: ${from}</div>
-      <div class="row">סכום: ${amount} ₪</div>
-      ${note? `<div class="row">הערה: ${note}</div>`:''}
-    `, docFileName('קבלה', docFromValue()));
+    /* Receipt (קבלה) — identical to the ypay.co.il / TCPDF layout, incl. the
+       blue electronic-signature seal at the top. */
+    const noRaw = (document.getElementById('docNum').value||'').trim();
+    const no = esc(noRaw) || '—';
+    const company = esc(docFromValue());
+    const dateISO = document.getElementById('docDate').value;
+    const dateStr = ypayDate(dateISO);
+    const method = esc(document.getElementById('docMethod').value.trim()) || 'העברה בנקאית';
+    const amount = num(document.getElementById('docAmount').value);
+    const details = esc(document.getElementById('docNote').value);
+    const withhold = 0;              /* עוסק פטור — no withholding tax */
+    const net = amount - withhold;
+    const body = `
+      ${ypayHead('קבלה ' + no + ' (מקור)', dateStr, true)}
+      <hr class="yp-hr">
+      ${ypayMeta(company, 'A.M.F')}
+      <table class="yp">
+        <colgroup><col style="width:32%"><col style="width:28%"><col style="width:22%"><col style="width:18%"></colgroup>
+        <thead><tr><th>אמצעי תשלום</th><th>פרטים</th><th>תאריך</th><th>סכום</th></tr></thead>
+        <tbody>
+          <tr><td>${method}</td><td>${details}</td><td>${dateStr}</td><td>${ypayMoney(amount)}</td></tr>
+          <tr class="bold"><td colspan="2"></td><td class="sumlabel">סה"כ</td><td>${ypayMoney(net)}</td></tr>
+          <tr><td colspan="2"></td><td class="sumlabel">ניכוי מס במקור</td><td>${ypayMoney(withhold)}</td></tr>
+          <tr><td colspan="2"></td><td class="sumlabel">סה"כ לפני ניכוי מס במקור</td><td>${ypayMoney(amount)}</td></tr>
+        </tbody>
+      </table>
+      <div class="yp-sig-l"><b>חתימה:</b> <span class="ln"></span> חתום דיגיטלית <span class="ln"></span></div>
+      ${ypayFoot(false)}
+    `;
+    printDoc('קבלה ' + no, body, docFileName('קבלה ' + no, docFromValue()), ypayCss());
+    bumpDocNum('receipt', noRaw);
   } else if(t==='libra'){
-    const date = new Date().toLocaleDateString('he-IL');
+    /* Payment demand (חשבון עסקה) — identical to the ypay.co.il / TCPDF layout.
+       One line per closed client: qty 1, unit price = the commission, line total
+       the same. עוסק פטור, so discount and VAT are 0.00 like the original. */
+    const noRaw = (document.getElementById('docNum').value||'').trim();
+    const no = esc(noRaw) || '—';
+    const dateStr = ypayDate(new Date().toISOString().slice(0,10));
     const rows = Array.from(document.querySelectorAll('#libraRows .libraRow')).map(r=>({
       name: esc(r.querySelector('.lrName').value),
       amount: num(r.querySelector('.lrAmount').value),
       note: esc(r.querySelector('.lrNote').value)
     })).filter(r=>r.name || r.amount || r.note);
-    const total = rows.reduce((s,r)=>s+r.amount,0);
-    /* the note column only appears on the printed page if something is in it */
-    const anyNote = rows.some(r=> r.note.trim());
-    printDoc('דרישת תשלום — ליברה', `
-      <h1>דרישת תשלום — ליברה</h1>
-      <div class="row"><b>אביחי מזוז — ח.פ. 204231658</b></div>
-      <div class="row label">תאריך: ${date}</div>
-      <table><thead><tr><th>שם הלקוח</th><th>סכום</th>${anyNote?'<th>הערה</th>':''}</tr></thead>
-      <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.amount.toLocaleString()} ₪</td>${anyNote?`<td>${r.note}</td>`:''}</tr>`).join('')}</tbody>
-      <tfoot><tr><td><b>סה"כ</b></td><td><b>${total.toLocaleString()} ₪</b></td>${anyNote?'<td></td>':''}</tr></tfoot>
+    const subtotal = rows.reduce((s,r)=>s+r.amount,0);
+    const discount = 0, vat = 0;
+    const exempt = subtotal - discount;
+    const grand = exempt + vat;
+    const company = 'ליברה חברה לביטוח בע"מ';
+    const body = `
+      ${ypayHead('חשבון עסקה ' + no + ' (מקור)', dateStr, false)}
+      <hr class="yp-hr">
+      ${ypayMeta(company, 'F.M.A')}
+      <table class="yp">
+        <colgroup><col style="width:22%"><col style="width:30%"><col style="width:16%"><col style="width:14%"><col style="width:18%"></colgroup>
+        <thead><tr><th>שם פריט/ מק"ט</th><th>תיאור</th><th>מחיר ליחידה</th><th class="c">כמות</th><th>סה"כ</th></tr></thead>
+        <tbody>
+          ${rows.map(r=>`<tr><td>${r.name}</td><td>${r.note}</td><td>${ypayMoney(r.amount)}</td><td class="c">1</td><td>${ypayMoney(r.amount)}</td></tr>`).join('')}
+          <tr><td colspan="2"></td><td class="sumlabel" colspan="2">הנחה</td><td>${ypayMoney(discount)}</td></tr>
+          <tr><td colspan="2"></td><td class="sumlabel" colspan="2">סה"כ פטור ממע"מ</td><td>${ypayMoney(exempt)}</td></tr>
+          <tr><td colspan="2"></td><td class="sumlabel" colspan="2">מע"מ</td><td>${ypayMoney(vat)}</td></tr>
+          <tr class="shade"><td colspan="2"></td><td class="sumlabel" colspan="2">סה"כ לתשלום</td><td>${ypayMoney(grand)}</td></tr>
+        </tbody>
       </table>
-    `, docFileName('דרישת תשלום ליברה', total.toLocaleString() + ' ש"ח'));
+      <div class="yp-sig-r"><b>חתימה:</b> ____________________</div>
+      ${ypayFoot(true)}
+    `;
+    printDoc('חשבון עסקה ' + no, body, docFileName('חשבון עסקה ' + no, grand.toLocaleString() + ' שח'), ypayCss());
+    bumpDocNum('libra', noRaw);
   } else if(t==='yashir'){
     const name = esc(document.getElementById('docName').value);
     /* Free text, so a client with two mortgages can be written out in full.

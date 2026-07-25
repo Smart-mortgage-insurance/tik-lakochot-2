@@ -1359,8 +1359,8 @@ function ypayCss(){ return `
   .amt{direction:ltr;unicode-bidi:isolate;display:inline-block;white-space:nowrap}
   .yp-sig-r{margin-top:66px;text-align:right}
   .yp-sig-l{position:fixed;left:54px;bottom:46px;font-size:13px;white-space:nowrap}
-  .yp-sig-l .ln{display:inline-block;border-bottom:1px solid #333;width:100px;margin:0 4px 3px;vertical-align:bottom}
-  .yp-sig-l .signed{display:inline-block;border-bottom:1px solid #333;padding:0 22px 3px;margin-right:4px;vertical-align:bottom}
+  .yp-sig-l .sigline{display:inline-block;position:relative;width:290px;height:22px;border-bottom:1px solid #333;margin-right:8px;vertical-align:bottom}
+  .yp-sig-l .sigline .sigtext{position:absolute;left:0;right:0;bottom:4px;text-align:center}
   .yp-foot{position:fixed;left:0;right:0;bottom:14px;text-align:center;color:#8a8a8a;font-size:10px;line-height:1.8}
   .yp-foot .link{color:#0f9d8f}
 `; }
@@ -1635,7 +1635,7 @@ function generateDoc(){
           <tr><td colspan="2"></td><td class="sumlabel">סה"כ לפני ניכוי מס במקור</td><td>${ypayMoney(amount)}</td></tr>
         </tbody>
       </table>
-      <div class="yp-sig-l"><b>חתימה:</b> <span class="ln"></span> <span class="signed">חתום דיגיטלית</span></div>
+      <div class="yp-sig-l"><b>חתימה:</b> <span class="sigline"><span class="sigtext">חתום דיגיטלית</span></span></div>
       ${ypayFoot(false)}
     `;
     printDoc('קבלה ' + no, body, docFileName('קבלה ' + no, docFromValue()), ypayCss());

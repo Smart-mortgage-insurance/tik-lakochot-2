@@ -721,6 +721,9 @@ async function loadLeads(){
   const fresh = leads.filter(l=> known.indexOf(l.id) < 0).map(l=> l.id);
   leadOrder = fresh.concat(known);
   renderLeads();
+  /* Pick up anything that closed at Libra outside this screen (chiefly the
+     server-side status sync) and file it into the payment demand. */
+  reconcileLibraDemand();
 }
 
 const CHANNELS = ['', 'ליברה', 'ישיר', 'ליברה וישיר'];
@@ -1645,6 +1648,57 @@ async function addLeadRowToLibraForm(lead, opts){
 async function addLeadToLibraForm(){
   if(!currentLead) return;
   await addLeadRowToLibraForm(currentLead, {silent:false});
+}
+
+/* Which leads we've already filed into the demand. An *empty* set that exists is
+   not the same as no set at all — the first tells us "seeded, nothing new yet",
+   the second "never seeded" — so we check whether the drafts row exists rather
+   than whether its list is empty (fetchOrder_ can't tell those apart). */
+async function libraPushedState(){
+  try{
+    const r = await authFetch('/rest/v1/drafts?key=eq.libra_demand_pushed&select=data');
+    if(r.ok){
+      const d = await r.json();
+      if(d.length) return {exists:true, ids:(d[0].data && Array.isArray(d[0].data.ids)) ? d[0].data.ids : []};
+    }
+  }catch(e){}
+  const ls = localStorage.getItem('leads2_libra_demand_pushed');
+  if(ls != null){ try{ return {exists:true, ids: JSON.parse(ls) || []}; }catch(e){} }
+  return {exists:false, ids:[]};
+}
+
+let libraReconcileBusy = false;
+/* Catch leads that closed at Libra without anyone opening their card — above all
+   the server-side Gemini status sync, which flips a lead to "נסגר בליברה" on its
+   own. On every leads load, each closed-Libra lead we haven't handled yet is
+   dropped into the payment demand and its id remembered, so a row Avi later
+   deletes is never resurrected. The very first run only *seeds* that memory with
+   whatever is already closed, so the backlog isn't dumped into the form. */
+async function reconcileLibraDemand(){
+  if(libraReconcileBusy) return;
+  libraReconcileBusy = true;
+  try{
+    const state = await libraPushedState();
+    const closed = leads.filter(l=> (l.status||'') === 'נסגר בליברה');
+    if(!state.exists){
+      await saveOrder_('libra_demand_pushed', 'leads2_libra_demand_pushed', closed.map(l=> l.id));
+      return;
+    }
+    const done = new Set(state.ids);
+    const fresh = closed.filter(l=> !done.has(l.id));
+    if(!fresh.length) return;
+    const pushed = state.ids.slice();
+    let added = 0;
+    for(const l of fresh){
+      const ok = await addLeadRowToLibraForm(l, {silent:true});
+      pushed.push(l.id);              /* mark handled even on a name-dupe, so it's never retried */
+      if(ok) added++;
+    }
+    await saveOrder_('libra_demand_pushed', 'leads2_libra_demand_pushed', pushed);
+    if(added) showToast('✅ ' + added + (added===1 ? ' לקוח נוסף' : ' לקוחות נוספו') + ' לדרישת התשלום לליברה');
+  } finally {
+    libraReconcileBusy = false;
+  }
 }
 
 function generateDoc(){

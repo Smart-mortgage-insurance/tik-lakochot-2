@@ -943,6 +943,7 @@ async function saveLead(){
   const obj = {};
   document.querySelectorAll('#modalGrid [data-k]').forEach(el=>{ obj[el.dataset.k] = el.value || null; });
   if(!obj.status) obj.status = 'ליד חדש';
+  const prevStatus = currentLead ? (currentLead.status || '') : '';
   let r;
   if(currentLead){
     r = await authFetch('/rest/v1/leads?id=eq.'+currentLead.id, {method:'PATCH', headers:{Prefer:'return=minimal'}, body: JSON.stringify(obj)});
@@ -950,7 +951,18 @@ async function saveLead(){
     obj.lead_date = obj.lead_date || new Date().toISOString().slice(0,10);
     r = await authFetch('/rest/v1/leads', {method:'POST', headers:{Prefer:'return=minimal'}, body: JSON.stringify(obj)});
   }
-  if(r.ok){ closeModal(); loadLeads(); }
+  if(r.ok){
+    /* The moment a lead becomes "נסגר בליברה" its row is dropped into the Libra
+       payment demand automatically — only on the transition, so re-saving an
+       already-closed lead doesn't nag. The row is editable/deletable there like
+       any other. Runs silently on the crossing so the toast can say both things. */
+    if(obj.status === 'נסגר בליברה' && prevStatus !== 'נסגר בליברה'){
+      const lead = Object.assign({}, currentLead || {}, obj);
+      const added = await addLeadRowToLibraForm(lead, {silent:true});
+      showToast(added ? '✅ נשמר · נוסף לדרישת התשלום לליברה' : '✅ נשמר');
+    }
+    closeModal(); loadLeads();
+  }
   else alert('שגיאה בשמירה');
 }
 
@@ -1582,10 +1594,20 @@ async function clearLibraForm(){
   showToast('✅ הטופס נוקה — מוכן לדרישה הבאה');
 }
 
-/* Send a closed lead straight into the payment demand from its card. */
-async function addLeadToLibraForm(){
-  if(!currentLead) return;
-  const amount = currentLead.paid_to_avi || '';
+/* The amount a closed Libra lead is owed: the commission actually received if
+   it's already recorded, otherwise the Libra tier off the monthly premium
+   (≥20→300, ≥15→200, else 100) — the very figure the demand is asking for. Left
+   blank only when there's nothing to go on, so Avi fills it by hand. */
+function libraDemandAmount(lead){
+  const paid = num(lead.paid_to_avi);
+  if(paid) return paid;
+  const prem = num(lead.premium);
+  if(!prem) return '';
+  return prem>=20 ? 300 : (prem>=15 ? 200 : 100);
+}
+
+/* The current payment-demand rows, from the shared draft (or the local mirror). */
+async function loadLibraFormRows(){
   let rows = [];
   try{
     const r = await authFetch('/rest/v1/drafts?key=eq.libra_form&select=data');
@@ -1597,14 +1619,32 @@ async function addLeadToLibraForm(){
   if(!rows.length){
     try{ rows = JSON.parse(localStorage.getItem('leads2_libra_form')) || []; }catch(e){ rows = []; }
   }
-  if(rows.some(r=> (r.name||'').trim() === (currentLead.name||'').trim())){
-    showToast('הלקוח כבר נמצא בדרישת התשלום', true);
-    return;
+  return rows;
+}
+
+/* Add one lead as a payment-demand row. Dedupes by name so a lead is never
+   listed twice, drops the blank placeholder row, and leaves the note alone.
+   Shared by the manual card button and the automatic on-close trigger. */
+async function addLeadRowToLibraForm(lead, opts){
+  opts = opts || {};
+  const name = (lead.name || '').trim();
+  let rows = await loadLibraFormRows();
+  if(name && rows.some(r=> (r.name||'').trim() === name)){
+    if(!opts.silent) showToast('הלקוח כבר נמצא בדרישת התשלום', true);
+    return false;
   }
-  rows.push({name: currentLead.name || '', amount: String(amount)});
+  rows = rows.filter(r=> (r.name||'').trim() || String(r.amount==null?'':r.amount).trim() || (r.note||'').trim());
+  rows.push({name: lead.name || '', amount: String(libraDemandAmount(lead) || '')});
   await saveOrder_('libra_form', 'leads2_libra_form', rows);
-  showToast('✅ נוסף לדרישת התשלום');
+  if(!opts.silent) showToast('✅ נוסף לדרישת התשלום');
   if(document.getElementById('docType').value === 'libra') restoreLibraRows();
+  return true;
+}
+
+/* Send a closed lead straight into the payment demand from its card. */
+async function addLeadToLibraForm(){
+  if(!currentLead) return;
+  await addLeadRowToLibraForm(currentLead, {silent:false});
 }
 
 function generateDoc(){

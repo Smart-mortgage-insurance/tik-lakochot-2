@@ -1391,6 +1391,7 @@ function ypayFoot(withTcpdf){
 
 function buildDocHtml(title, bodyHtml, customCss){
   const style = customCss || `
+      @page{margin:0}
       body{font-family:Arial,sans-serif;padding:40px;color:#1b1f27}
       h1{font-size:1.3rem;border-bottom:2px solid #a9822f;padding-bottom:10px}
       table{width:100%;border-collapse:collapse;margin-top:16px}
@@ -1690,7 +1691,6 @@ function generateDoc(){
     const idn = esc(document.getElementById('docIdn').value);
     const phone = esc(document.getElementById('docPhone').value);
     printDoc('ליד לישיר - '+name, `
-      <h1>טופס ליד — ביטוח ישיר</h1>
       <div class="row">שם הלקוח: ${name}</div>
       ${idn? `<div class="row">תעודת זהות: ${idn}</div>`:''}
       ${phone? `<div class="row">טלפון: ${phone}</div>`:''}
@@ -2007,7 +2007,6 @@ function yashirPdfAction(){
     insLines = `<div class="row">משכנתא חדשה על סך ${mort}</div>`;
   }
   printDoc('ליד לישיר - ' + name, `
-    <h1>טופס ליד — ביטוח ישיר</h1>
     <div class="row">שם הלקוח: ${name}</div>
     ${idn? `<div class="row">תעודת זהות: ${idn}</div>`:''}
     ${phone? `<div class="row">טלפון: ${phone}</div>`:''}

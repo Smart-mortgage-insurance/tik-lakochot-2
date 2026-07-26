@@ -1693,9 +1693,7 @@ function generateDoc(){
     printDoc('ליד לישיר - '+name, `
       <div class="row">שם הלקוח: ${name}</div>
       ${idn? `<div class="row">תעודת זהות: ${idn}</div>`:''}
-      ${phone? `<div class="row">טלפון: ${phone}</div>`:''}
       <div class="row">סכום משכנתא: ${mortgage}</div>
-      <div class="row label">תאריך: ${new Date().toLocaleDateString('he-IL')}</div>
     `, docFileName('ליד לישיר', name));
   }
 }
@@ -2009,9 +2007,7 @@ function yashirPdfAction(){
   printDoc('ליד לישיר - ' + name, `
     <div class="row">שם הלקוח: ${name}</div>
     ${idn? `<div class="row">תעודת זהות: ${idn}</div>`:''}
-    ${phone? `<div class="row">טלפון: ${phone}</div>`:''}
     ${insLines}
-    <div class="row label">תאריך: ${new Date().toLocaleDateString('he-IL')}</div>
   `, docFileName('ליד לישיר', name));
 }
 

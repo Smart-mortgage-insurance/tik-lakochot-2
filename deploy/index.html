@@ -998,6 +998,37 @@ function topOf(counts){
   return e ? e[0] : '-';
 }
 
+/* City/region come from the IP lookup in English; show them in Hebrew.
+   Unknown names fall through unchanged, so nothing ever breaks. */
+const HE_CITY = {
+  'Tel-Aviv':'תל אביב','Tel Aviv':'תל אביב','Jerusalem':'ירושלים','Haifa':'חיפה',
+  'Rishon LeZion':'ראשון לציון','Petah Tikva':'פתח תקווה','Ashdod':'אשדוד','Netanya':'נתניה',
+  'Beer Sheva':'באר שבע','Beersheba':'באר שבע','Bnei Brak':'בני ברק','Holon':'חולון',
+  'Ramat Gan':'רמת גן','Bat Yam':'בת ים','Ashkelon':'אשקלון','Rehovot':'רחובות',
+  'Herzliya':'הרצליה','Kfar Saba':'כפר סבא','Raanana':"רעננה",'Modiin':'מודיעין',
+  'Modiin Illit':'מודיעין עילית','Beit Shemesh':'בית שמש','Elad':'אלעד','El Ad':'אלעד',
+  'Rosh HaAyin':'ראש העין','Rosh Haayin':'ראש העין','Givat Shmuel':'גבעת שמואל',
+  'Givatayim':'גבעתיים','Nes Ziona':'נס ציונה','Yavne':'יבנה','Or Yehuda':'אור יהודה',
+  'Kiryat Ono':'קרית אונו','Kiryat Gat':'קרית גת','Kiryat Ata':'קרית אתא','Kiryat Bialik':'קרית ביאליק',
+  'Kiryat Motzkin':'קרית מוצקין','Kiryat Yam':'קרית ים','Kiryat Tivon':'קרית טבעון',
+  'Nahariya':'נהריה','Acre':'עכו','Akko':'עכו','Afula':'עפולה','Nazareth':'נצרת',
+  'Tiberias':'טבריה','Safed':'צפת','Karmiel':'כרמיאל','Hadera':'חדרה','Lod':'לוד',
+  'Ramla':'רמלה','Ramle':'רמלה','Azor':'אזור','Dimona':'דימונה','Sderot':'שדרות','Eilat':'אילת',
+  'Ariel':'אריאל','Betar Illit':'ביתר עילית','Mate Yehuda':'מטה יהודה','Maale Adumim':'מעלה אדומים',
+  'Tirat Carmel':'טירת כרמל','Or Akiva':'אור עקיבא','Rosh Pina':'ראש פינה',
+  'Toronto':'טורונטו','London':'לונדון','New York':'ניו יורק','Paris':'פריז',
+  'Huntingdon':'הנטינגדון','Los Angeles':'לוס אנג׳לס','Montreal':'מונטריאול'
+};
+const HE_REGION = {
+  'Tel-Aviv District':'מחוז תל אביב','Center District':'מחוז המרכז','Central District':'מחוז המרכז',
+  'Jerusalem District':'מחוז ירושלים','South District':'מחוז הדרום','Southern District':'מחוז הדרום',
+  'North District':'מחוז הצפון','Northern District':'מחוז הצפון','Haifa District':'מחוז חיפה',
+  'Judea and Samaria Area':'יהודה ושומרון','Judea and Samaria':'יהודה ושומרון',
+  'Ontario':'אונטריו','England':'אנגליה','Ile-de-France':'איל דה פראנס'
+};
+function heCity(name){ if(!name) return name; return HE_CITY[name] || HE_CITY[name.replace(/-/g,' ')] || name; }
+function heRegion(name){ if(!name) return name; return HE_REGION[name] || name; }
+
 function renderVisits(){
   const total = visits.length;
   const converted = visits.filter(v=>v.converted).length;
@@ -1014,13 +1045,13 @@ function renderVisits(){
     <div class="stat"><div class="num">${converted}</div><div class="lbl">הפכו לפנייה</div></div>
     <div class="stat"><div class="num">${rate}%</div><div class="lbl">אחוז המרה</div></div>
     <div class="stat"><div class="num">${topDevice? topDevice[0] : '-'}</div><div class="lbl">מכשיר מוביל</div></div>
-    <div class="stat"><div class="num">${esc(topOf(cities))}</div><div class="lbl">עיר מובילה</div></div>
+    <div class="stat"><div class="num">${esc(heCity(topOf(cities)))}</div><div class="lbl">עיר מובילה</div></div>
     <div class="stat"><div class="num">${esc(topOf(sources))}</div><div class="lbl">מקור מוביל</div></div>
   `;
   const body = document.getElementById('visitsBody');
   if(!visits.length){ body.innerHTML = '<tr><td colspan="12" class="empty">אין נתוני מבקרים עדיין</td></tr>'; return; }
   body.innerHTML = visits.map(v=>{
-    const city = v.city ? esc(v.city) + (v.region ? ' <span style="opacity:.6">('+esc(v.region)+')</span>' : '') : '';
+    const city = v.city ? esc(heCity(v.city)) + (v.region ? ' <span style="opacity:.6">('+esc(heRegion(v.region))+')</span>' : '') : '';
     const source = v.utm_source ? esc(v.utm_source) + (v.utm_medium ? ' / '+esc(v.utm_medium) : '') : '';
     return `
     <tr data-id="${v.id}">
